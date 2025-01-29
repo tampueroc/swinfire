@@ -1,0 +1,21 @@
+max_epochs: 100
+accelerator: gpu
+devices: 1
+precision: 16-mixed
+strategy: null
+
+logger:
+  enabled: true
+  dir: logs/            # Directory to save logs
+  name: training_logs   # Name for the logger
+
+callbacks:
+  early_stopper:
+    enabled: true
+    monitor: val_loss   # Metric to monitor
+    patience: 10        # Number of epochs to wait for improvement
+    mode: min           # Options: 'min' or 'max'
+    min_delta: 0.001    # Minimum change to qualify as an improvement
+
+  image_logger:
+    enabled: true       # Enable logging of image predictions

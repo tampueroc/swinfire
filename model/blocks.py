@@ -1,8 +1,8 @@
 from torch import nn
 from typing import Union, List
 
-from utils import Residual3D, PreNorm3D, Norm
-from attention import WindowAttention3D, FeedForward3D
+from .utils import Residual3D, PreNorm3D, Norm
+from .attention import WindowAttention3D, FeedForward3D
 
 class SwinBlock3D(nn.Module):  # 不会改变输入空间分辨率
     def __init__(self, dim, heads, head_dim, mlp_dim, shifted, window_size: Union[int, List[int]],

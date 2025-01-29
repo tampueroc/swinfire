@@ -1,10 +1,10 @@
 in_channels: 1                  # Input Channels (Fire State)
-hidden_dim: 128                 # Hidden dimensions of the model
+hidden_dim: 96                 # Hidden dimensions of the model
 layers: [2, 2, 4, 2]            # Number of layers in each stage
-downscaling_factors: [5, 2, 2, 2]  # Downscaling factors for each stage
+downscaling_factors: [4, 2, 2, 2]  # Downscaling factors for each stage
 heads: [3, 6, 9, 12]            # Number of attention heads
 head_dim: 64                    # Dimension per attention head
-window_size: [4, 4, 4]          # Window size for attention
+window_size: 4
 dropout: 0.1                    # Dropout rate
 relative_pos_embedding: true    # Enable relative positional embedding
 num_classes: 2                  # Number of output classes

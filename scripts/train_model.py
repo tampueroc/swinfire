@@ -59,7 +59,7 @@ def main(args):
 
     # Model
     model = SwinUnet3D(
-        in_channels=model_cfg['in_channels'],
+        in_channel=model_cfg['in_channels'],
         hidden_dim=model_cfg['hidden_dim'],
         layers=model_cfg['layers'],
         downscaling_factors=model_cfg['downscaling_factors'],
@@ -78,7 +78,7 @@ def main(args):
         devices=trainer_cfg['devices'],
         precision=trainer_cfg['precision'],
         logger=logger,
-        strategy=trainer_cfg['ddp'],
+        strategy=trainer_cfg['strategy'],
         callbacks=callbacks
     )
     trainer.fit(

@@ -2,9 +2,9 @@ from torch import nn
 from typing import List, Union
 from einops.layers.torch import Rearrange
 
-from blocks import ConvBlock, SwinBlock3D
-from patch_layers import PatchExpanding3D
-from utils import Norm
+from .blocks import ConvBlock, SwinBlock3D
+from .patch_layers import PatchExpanding3D
+from .utils import Norm
 
 
 class Decoder(nn.Module):

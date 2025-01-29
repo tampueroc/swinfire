@@ -7,6 +7,9 @@ requires-python = ">=3.10"
 dependencies = [
     "einops>=0.8.0",
     "lightning>=2.5.0.post0",
+    "rioxarray>=0.18.2",
+    "tensorboard>=2.18.0",
     "timm>=1.0.14",
     "torch>=2.5.1",
+    "torchmetrics>=1.6.1",
 ]

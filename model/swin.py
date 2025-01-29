@@ -1,17 +1,38 @@
 from torch import nn
 from typing import List, Union
+import numpy as np
+import torch.optim as optim
+import pytorch_lightning as pl
+import torchmetrics
+import torch.nn.functional as F
 
-from encoder import Encoder
-from decoder import Decoder, Converge
-from patch_layers import FinalExpand3D
+from .encoder import Encoder
+from .decoder import Decoder, Converge
+from .patch_layers import FinalExpand3D
 from timm.models.layers import trunc_normal_
 
-class SwinUnet3D(nn.Module):
+class SwinUnet3D(pl.LightningModule):
     def __init__(self, *, hidden_dim, layers, heads, in_channel=1, num_classes=2, head_dim=32,
                  window_size: Union[int, List[int]] = 4, downscaling_factors=(4, 2, 2, 2),
                  relative_pos_embedding=True, dropout: float = 0.0, skip_style='stack',
-                 stl_channels: int = 32):  # second_to_last_channels
+                 stl_channels: int = 32, learning_rate: float = 3e-4):  # second_to_last_channels
         super().__init__()
+
+        self.learning_rate = learning_rate
+         # Metrics for training
+        self.train_accuracy = torchmetrics.classification.BinaryAccuracy()
+        self.train_precision = torchmetrics.classification.BinaryPrecision()
+        self.train_recall = torchmetrics.classification.BinaryRecall()
+        self.train_f1 = torchmetrics.classification.BinaryF1Score()
+
+        # Metrics for training
+        self.val_accuracy = torchmetrics.classification.BinaryAccuracy()
+        self.val_precision = torchmetrics.classification.BinaryPrecision()
+        self.val_recall = torchmetrics.classification.BinaryRecall()
+        self.val_f1 = torchmetrics.classification.BinaryF1Score()
+
+        # Loss
+        self.loss_fn = F.binary_cross_entropy_with_logits
 
         self.dsf = downscaling_factors
         self.window_size = window_size
@@ -76,9 +97,9 @@ class SwinUnet3D(nn.Module):
         _, _, x_s, y_s, z_s = img.shape
         x_ws, y_ws, z_ws = window_size
 
-        assert x_s % (x_ws * 32) == 0, 'x轴上的尺寸必须能被x_window_size*32 整除'
-        assert y_s % (y_ws * 32) == 0, 'y轴上的尺寸必须能被y_window_size*32 整除'
-        assert z_s % (z_ws * 32) == 0, 'y轴上的尺寸必须能被z_window_size*32 整除'
+        assert x_s % (x_ws * 32) == 0, f'x-axis size ({x_s}) must be divisible by x_window_size * 32 ({x_ws * 32}).'
+        assert y_s % (y_ws * 32) == 0, f'y-axis size ({y_s}) must be divisible by y_window_size * 32 ({y_ws * 32}).'
+
 
         down12_1 = self.enc12(img)  # (B,C, X//4, Y//4, Z//4)
         down3 = self.enc3(down12_1)  # (B, 2C,X//8, Y//8, Z//8)
@@ -110,4 +131,43 @@ class SwinUnet3D(nn.Module):
             if isinstance(m, nn.LayerNorm):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0.0)
+
+    def training_step(self, batch, batch_idx):
+        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        pred = self(fire_seq)
+        loss = self.loss_fn(pred, isochrone_mask)
+        self.log("train_loss", loss)
+
+        # Update metrics
+        self.train_accuracy(pred, isochrone_mask)
+        self.train_precision(pred, isochrone_mask)
+        self.train_recall(pred, isochrone_mask)
+        self.train_f1(pred, isochrone_mask)
+
+        self.log("train_accuracy", self.train_accuracy, on_step=True, on_epoch=False)
+        self.log("train_precision", self.train_precision, on_step=True, on_epoch=False)
+        self.log("train_recall", self.train_recall, on_step=True, on_epoch=False)
+        self.log("train_f1", self.train_f1, on_step=True, on_epoch=False)
+        return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
+
+    def validation_step(self, batch, batch_idx):
+        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        pred = self(fire_seq)
+        loss = self.loss_fn(pred, isochrone_mask)
+        self.log("val_loss", loss)
+
+        # Update metrics
+        self.val_accuracy(pred, isochrone_mask)
+        self.val_precision(pred, isochrone_mask)
+        self.val_recall(pred, isochrone_mask)
+        self.val_f1(pred, isochrone_mask)
+
+        self.log("val_accuracy", self.val_accuracy, on_step=False, on_epoch=True)
+        self.log("val_precision", self.val_precision, on_step=False, on_epoch=True)
+        self.log("val_recall", self.val_recall, on_step=False, on_epoch=True)
+        self.log("val_f1", self.val_f1, on_step=False, on_epoch=True)
+        return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
+
+    def configure_optimizers(self):
+        return optim.Adam(self.parameters(), lr=self.learning_rate)
 

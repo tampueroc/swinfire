@@ -5,7 +5,7 @@ import numpy as np
 from torch import einsum
 
 
-from utils import CyclicShift3D, create_mask3D
+from .utils import CyclicShift3D, create_mask3D
 
 class WindowAttention3D(nn.Module):
     def __init__(self, dim: int, heads: int, head_dim: int, shifted: bool, window_size: Union[int, List[int]],

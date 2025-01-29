@@ -117,7 +117,7 @@ class FireDataset:
 
             # Create the binary mask and add a channel dimension [C=1, H, W]
             mask = torch.where(img[1] == 231, 1.0, 0.0).unsqueeze(0)  # [1, H, W]
-            padded_mask = F.pad(mask, (8, 8, 8, 8), mode='constant', value=0)
+            padded_mask = F.pad(mask, (56, 56, 56, 56), mode='constant', value=0)
             frame_masks.append(padded_mask)
 
         # Stack along the temporal dimension => [T, C, H, W]

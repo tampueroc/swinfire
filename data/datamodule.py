@@ -1,4 +1,5 @@
 import torch
+import pdb
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
 
@@ -13,29 +14,29 @@ def collate_fn(batch):
     Args:
         batch: List of tuples (fire_sequence, static_data, wind_inputs, isochrone_mask).
     Returns:
-        padded_fire_sequences: Tensor [B, T_max, C, H, W].
+        padded_fire_sequences: Tensor [B, C, H, W, T_max].
         static_data: Tensor [B, 1, C, H, W].
-        padded_wind_inputs: Tensor [B, T_max, 2].
+        padded_wind_inputs: Tensor [B, 2, T_max].
         isochrone_masks: Tensor [B, 1, H, W].
         valid_tokens: Tensor [B, T_max] (1 for valid, 0 for padded positions).
     """
     fire_sequences, static_data, wind_inputs, isochrone_masks = zip(*batch)
 
     # 1. Find the maximum sequence length in the batch
-    max_len = max(seq.size(0) for seq in fire_sequences)
+    max_len = max(seq.shape[-1] for seq in fire_sequences)  # Get max T across batch
 
-    # 2. Pad fire sequences along the temporal dimension
-    padded_fire_sequences = torch.zeros(len(fire_sequences), max_len, *fire_sequences[0].shape[1:])
+    # 2. Pad fire sequences along the last dimension (T dimension)
+    padded_fire_sequences = torch.zeros(len(fire_sequences), *fire_sequences[0].shape[:-1], max_len)
     for i, seq in enumerate(fire_sequences):
-        padded_fire_sequences[i, :seq.size(0)] = seq
+        padded_fire_sequences[i, ..., :seq.shape[-1]] = seq  # Pad last dimension
 
     # 3. Create valid_tokens mask for padded positions
     valid_tokens = torch.zeros(len(fire_sequences), max_len, dtype=torch.float32)
     for i, seq in enumerate(fire_sequences):
-        valid_tokens[i, :seq.size(0)] = 1  # Mark valid positions as 1
+        valid_tokens[i, :seq.shape[-1]] = 1  # Mark valid positions as 1
 
-    # 4. Pad wind inputs along the temporal dimension
-    padded_wind_inputs = pad_sequence(wind_inputs, batch_first=True, padding_value=0.0)  # [B, T_max, 2]
+    # 4. Pad wind inputs along the last temporal dimension
+    padded_wind_inputs = pad_sequence(wind_inputs, batch_first=True, padding_value=0.0).permute(0, 2, 1)  # [B, 2, T_max]
 
     # 5. Stack static_data and isochrone_masks (assume fixed spatial dimensions)
     static_data = torch.stack(static_data)  # [B, 1, C, H, W]
@@ -57,7 +58,8 @@ class FireDataModule(pl.LightningDataModule):
         num_workers: int = 4,
         seed: int = 42,
         drop_last: bool = False,
-        pin_memory: bool = True
+        pin_memory: bool = True,
+        use_collate_fn: bool = False
     ):
         """
         A LightningDataModule for the FireDataset.
@@ -80,6 +82,7 @@ class FireDataModule(pl.LightningDataModule):
         self.seed = seed
         self.drop_last = drop_last
         self.pin_memory = pin_memory
+        self.use_collate_fn = use_collate_fn
 
         self.dataset = None
         self.train_dataset = None
@@ -132,7 +135,7 @@ class FireDataModule(pl.LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             drop_last=self.drop_last,
-            collate_fn=collate_fn,
+            collate_fn=collate_fn if self.use_collate_fn is True else None,
             pin_memory=self.pin_memory
         )
 
@@ -143,7 +146,7 @@ class FireDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=self.drop_last,
-            collate_fn=collate_fn,
+            collate_fn=collate_fn if self.use_collate_fn is True else None,
             pin_memory=self.pin_memory
         )
 
@@ -154,6 +157,6 @@ class FireDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=self.drop_last,
-            collate_fn=collate_fn,
+            collate_fn=collate_fn if self.use_collate_fn is True else None,
             pin_memory=self.pin_memory
         )

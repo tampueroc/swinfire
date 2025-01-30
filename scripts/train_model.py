@@ -53,6 +53,7 @@ def main(args):
         num_workers=data_cfg['num_workers'],
         drop_last=data_cfg['drop_last'],
         pin_memory=data_cfg['pin_memory'],
+        use_collate_fn=data_cfg['use_collate_fn'],
         seed=global_cfg.get('seed', 42)
     )
     datamodule.setup()

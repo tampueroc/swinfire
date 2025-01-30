@@ -135,7 +135,8 @@ class SwinUnet3D(pl.LightningModule):
                 nn.init.constant_(m.bias, 0.0)
 
     def training_step(self, batch, batch_idx):
-        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        fire_seq, static_data, wind_inputs, *isochrone_mask = batch
+        isochrone_mask = isochrone_mask[0]
         pred = self(fire_seq)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
@@ -154,7 +155,8 @@ class SwinUnet3D(pl.LightningModule):
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
     def validation_step(self, batch, batch_idx):
-        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        fire_seq, static_data, wind_inputs, *isochrone_mask = batch
+        isochrone_mask = isochrone_mask[0]
         pred = self(fire_seq)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)

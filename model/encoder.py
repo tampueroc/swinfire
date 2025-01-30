@@ -31,13 +31,13 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         x = self.patch_partition(x)
-        x2 = self.conv_block(x)  # 卷积块学习短距离依赖
+        x2 = self.conv_block(x)  # Short dependencies
 
         x = self.re1(x)
-        for regular_block, shifted_block in self.swin_layers:  # swin_layers块学习长距离依赖
+        for regular_block, shifted_block in self.swin_layers:  # Long dependencies
             x = regular_block(x)
             x = shifted_block(x)
         x = self.re2(x)
 
-        x = x + x2  # 对长短距离依赖信息进行融合
+        x = x + x2  # Long and short length dependencies
         return x

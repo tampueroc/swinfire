@@ -9,13 +9,14 @@ import torch.nn.functional as F
 from .encoder import Encoder
 from .decoder import Decoder, Converge
 from .patch_layers import FinalExpand3D
+from .losses import WeightedFocalLoss
 from timm.models.layers import trunc_normal_
 
 class SwinUnet3D(pl.LightningModule):
     def __init__(self, *, hidden_dim, layers, heads, in_channel=1, num_classes=2, head_dim=32,
                  window_size: Union[int, List[int]] = 4, downscaling_factors=(4, 2, 2, 2),
                  relative_pos_embedding=True, dropout: float = 0.0, skip_style='stack',
-                 stl_channels: int = 32, learning_rate: float = 3e-4):  # second_to_last_channels
+                 stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce"):  # second_to_last_channels
         super().__init__()
 
         self.learning_rate = learning_rate
@@ -32,7 +33,13 @@ class SwinUnet3D(pl.LightningModule):
         self.val_f1 = torchmetrics.classification.BinaryF1Score()
 
         # Loss
-        self.loss_fn = F.binary_cross_entropy_with_logits
+        if loss_fn == "bce":
+            self.loss_fn = F.binary_cross_entropy_with_logits
+        elif loss_fn == "focal_loss":
+            self.loss_fn = WeightedFocalLoss(
+                    alpha=0.95,
+                    gamma=2
+            )
 
         self.dsf = downscaling_factors
         self.window_size = window_size

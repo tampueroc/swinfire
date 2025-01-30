@@ -7,4 +7,4 @@ head_dim: 64                    # Dimension per attention head
 window_size: 4
 dropout: 0.1                    # Dropout rate
 relative_pos_embedding: true    # Enable relative positional embedding
-num_classes: 2                  # Number of output classes
+num_classes: 1                  # Number of output classes

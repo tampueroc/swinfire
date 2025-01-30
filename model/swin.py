@@ -120,6 +120,8 @@ class SwinUnet3D(pl.LightningModule):
 
         out = self.final(up12)  # (B,num_classes, X, Y, Z)
         out = self.out(out)
+        # Slice last temporal step
+        out = out[..., -1]
         return out
 
     def init_weight(self):
@@ -135,6 +137,7 @@ class SwinUnet3D(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
         pred = self(fire_seq)
+        pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("train_loss", loss)
 
@@ -153,8 +156,8 @@ class SwinUnet3D(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
         pred = self(fire_seq)
-        pred_cropped = pred[..., 56:-56, 56:-56, :]
-        loss = self.loss_fn(pred_cropped, isochrone_mask)
+        pred = pred[..., 56:-56, 56:-56]
+        loss = self.loss_fn(pred, isochrone_mask)
         self.log("val_loss", loss)
 
         # Update metrics

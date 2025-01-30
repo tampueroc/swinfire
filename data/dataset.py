@@ -144,7 +144,7 @@ class FireDataset:
         itarget = item['iso_target_index']
         ipath = os.path.join(item['iso_path'], item['iso_files'][itarget])
         iso_img = read_image(ipath)  # [3, H, W]
-        isochrone_mask = torch.where(iso_img[1] == 231, 1.0, 0.0).unsqueeze(-1)  # => [1, H, W, 1]
+        isochrone_mask = torch.where(iso_img[1] == 231, 1.0, 0.0).unsqueeze(0)  # => [1, H, W]
 
         # Optional transform (e.g. cropping, scaling, etc.)
         if self.transform:

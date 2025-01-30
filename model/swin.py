@@ -153,7 +153,8 @@ class SwinUnet3D(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
         pred = self(fire_seq)
-        loss = self.loss_fn(pred, isochrone_mask)
+        pred_cropped = pred[..., 56:-56, 56:-56, :]
+        loss = self.loss_fn(pred_cropped, isochrone_mask)
         self.log("val_loss", loss)
 
         # Update metrics

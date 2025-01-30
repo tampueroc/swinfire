@@ -42,9 +42,10 @@ class FinalExpand3D(nn.Module):  # 体素最终分类时使用
     def __init__(self, in_dim, out_dim, up_scaling_factor):  # stl为second_to_last的缩写
         super(FinalExpand3D, self).__init__()
 
-        stride = up_scaling_factor
-        kernel_size = up_scaling_factor
-        padding = (kernel_size - stride) // 2
+        upscaling_factor = (up_scaling_factor, up_scaling_factor, 1)
+        stride = upscaling_factor
+        kernel_size = upscaling_factor
+        padding = (np.array(kernel_size) - np.array(stride)) // 2
         self.net = nn.Sequential(
             nn.ConvTranspose3d(in_dim, out_dim, kernel_size=kernel_size, stride=stride, padding=padding),
             Norm(out_dim),

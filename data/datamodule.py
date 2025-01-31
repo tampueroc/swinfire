@@ -28,15 +28,17 @@ def collate_fn(batch):
     # 2. Pad fire sequences along the last dimension (T dimension)
     padded_fire_sequences = torch.zeros(len(fire_sequences), *fire_sequences[0].shape[:-1], max_len)
     for i, seq in enumerate(fire_sequences):
-        padded_fire_sequences[i, ..., :seq.shape[-1]] = seq  # Pad last dimension
+        padded_fire_sequences[i, ..., -seq.shape[-1]:] = seq  # Front-padding
 
     # 3. Create valid_tokens mask for padded positions
     valid_tokens = torch.zeros(len(fire_sequences), max_len, dtype=torch.float32)
     for i, seq in enumerate(fire_sequences):
-        valid_tokens[i, :seq.shape[-1]] = 1  # Mark valid positions as 1
+        valid_tokens[i, -seq.shape[-1]:] = 1 # Mark valid positions as 1
 
     # 4. Pad wind inputs along the last temporal dimension
-    padded_wind_inputs = pad_sequence(wind_inputs, batch_first=True, padding_value=0.0).permute(0, 2, 1)  # [B, 2, T_max]
+    padded_wind_inputs = torch.zeros(len(wind_inputs), 2, max_len)
+    for i, wind in enumerate(wind_inputs):
+        padded_wind_inputs[i, :, -wind.shape[-1]:] = wind  # Align wind with fire
 
     # 5. Stack static_data and isochrone_masks (assume fixed spatial dimensions)
     static_data = torch.stack(static_data)  # [B, 1, C, H, W]

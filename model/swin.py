@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 from typing import List, Union
 import numpy as np
 import torch.optim as optim
@@ -97,7 +98,11 @@ class SwinUnet3D(pl.LightningModule):
         # 参数初始化
         self.init_weight()
 
-    def forward(self, img):
+    def forward(self, img, static_data):
+        # Expand static_data to match T=4
+        static_data = static_data.expand(-1, -1, -1, -1, img.shape[-1])  # [B, C=8, H, W, T=4]
+        # Concatenate along the Channel (C) dimension (dim=1)
+        img = torch.cat([img, static_data], dim=1)  # [B, C=9, H, W, T=4]
         window_size = self.window_size
         assert type(window_size) is int or len(window_size) == 3, 'window_size must be 1 or 3 dimension'
         if type(window_size) is int:
@@ -145,7 +150,7 @@ class SwinUnet3D(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, *isochrone_mask = batch
         isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq)
+        pred = self(fire_seq, static_data)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("train_loss", loss)
@@ -165,7 +170,7 @@ class SwinUnet3D(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, *isochrone_mask = batch
         isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq)
+        pred = self(fire_seq, static_data)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("val_loss", loss)

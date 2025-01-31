@@ -127,6 +127,7 @@ class FireDataset:
         # 2) Static Data (landscape)
         static_data = item['landscape']  # [1, C, H, W]
         padded_static_data = F.pad(static_data, (56, 56, 56, 56), mode='constant', value=0)
+        padded_static_data = padded_static_data.permute(1, 2, 3, 0)  # [C, H, W, T]
 
         # 3) Wind Inputs
         # Gather wind data for each timestep in the sub-sequence

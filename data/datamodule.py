@@ -1,5 +1,4 @@
 import torch
-import pdb
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split
 
@@ -38,7 +37,8 @@ def collate_fn(batch):
     # 4. Pad wind inputs along the last temporal dimension
     padded_wind_inputs = torch.zeros(len(wind_inputs), 2, max_len)
     for i, wind in enumerate(wind_inputs):
-        padded_wind_inputs[i, :, -wind.shape[-1]:] = wind  # Align wind with fire
+        wind = wind.T
+        padded_wind_inputs[i, :, -wind.shape[1]:] = wind  # Align wind with fire
 
     # 5. Stack static_data and isochrone_masks (assume fixed spatial dimensions)
     static_data = torch.stack(static_data)  # [B, 1, C, H, W]

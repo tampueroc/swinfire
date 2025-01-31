@@ -126,6 +126,7 @@ class FireDataset:
 
         # 2) Static Data (landscape)
         static_data = item['landscape']  # [1, C, H, W]
+        padded_static_data = F.pad(static_data, (56, 56, 56, 56), mode='constant', value=0)
 
         # 3) Wind Inputs
         # Gather wind data for each timestep in the sub-sequence
@@ -159,12 +160,12 @@ class FireDataset:
             fire_sequence = torch.stack(transformed_frames, dim=0)
 
             # static_data is [C, H, W] => pass directly
-            static_data = self.transform(static_data)
+            padded_static_data = self.transform(padded_static_data)
 
             # isochrone_mask is [1, H, W] => pass directly
             isochrone_mask = self.transform(isochrone_mask)
 
-        return fire_sequence, static_data, wind_inputs, isochrone_mask
+        return fire_sequence, padded_static_data, wind_inputs, isochrone_mask
 
     def __len__(self):
         return len(self.samples)

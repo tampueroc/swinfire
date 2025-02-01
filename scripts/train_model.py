@@ -81,6 +81,11 @@ def main(args):
         precision=trainer_cfg['precision'],
         logger=logger,
         strategy=trainer_cfg['strategy'],
+<<<<<<< Updated upstream
+=======
+        fast_dev_run=trainer_cfg['fast_dev_run'],
+        accumulate_grad_batches=trainer_cfg['accumulate_grad_batches'],
+>>>>>>> Stashed changes
         callbacks=callbacks
     )
     trainer.fit(

@@ -40,3 +40,57 @@ class ConvBlock(nn.Module):
         x = self.net(x) * x2
         return x
 
+class LandscapeConvBlock(nn.Module):
+    def __init__(self, in_channels=8, out_features=64):
+        """
+        Lightweight CNN branch for extracting spatial features from an 8-channel static map.
+
+        Args:
+            in_channels (int): Number of input channels (default: 8).
+            out_features (int): Desired number of output feature channels.
+                                If set to 64, the projection layer becomes an identity.
+        """
+        super(LandscapeConvBlock, self).__init__()
+
+        # First convolutional block: 8 -> 16 channels.
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2)  # Halve spatial dimensions.
+        )
+
+        # Second convolutional block: 16 -> 32 channels.
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2)  # Halve spatial dimensions.
+        )
+
+        # Third convolutional block: 32 -> 64 channels.
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True)
+        )
+
+        # Optional projection layer to adjust channel dimension if needed.
+        self.projection = nn.Conv2d(64, out_features, kernel_size=1) if out_features != 64 else nn.Identity()
+
+    def forward(self, x):
+        """
+        Forward pass.
+
+        Args:
+            x (Tensor): Input tensor of shape [B, in_channels, H, W].
+
+        Returns:
+            Tensor: Extracted spatial features of shape [B, out_features, H_out, W_out].
+        """
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.projection(x)
+        return x
+

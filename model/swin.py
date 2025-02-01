@@ -11,6 +11,7 @@ from .encoder import Encoder
 from .decoder import Decoder, Converge
 from .patch_layers import FinalExpand3D
 from .losses import WeightedFocalLoss
+from .blocks import LandscapeConvBlock
 from timm.models.layers import trunc_normal_
 
 class SwinUnet3D(pl.LightningModule):
@@ -45,6 +46,16 @@ class SwinUnet3D(pl.LightningModule):
 
         self.dsf = downscaling_factors
         self.window_size = window_size
+
+        self.landscape_conv_block = LandscapeConvBlock(
+                    in_channels=8,
+                    out_features=64
+        )
+        self.fusion_conv = nn.Conv3d(
+            in_channels=8+1,
+            out_channels=1,
+            kernel_size=1
+        )
 
         self.enc12 = Encoder(in_dims=in_channel, hidden_dimension=hidden_dim, layers=layers[0],
                              downscaling_factor=downscaling_factors[0], num_heads=heads[0],
@@ -99,8 +110,14 @@ class SwinUnet3D(pl.LightningModule):
         self.init_weight()
 
     def forward(self, img, static_data):
-        # Expand static_data to match T=4
-        static_data = static_data.expand(-1, -1, -1, -1, img.shape[-1])  # [B, C=8, H, W, T=4]
+        # Process static_data with the dedicated CNN branch
+        # static_data: [B, 8, H, W]
+        static_features = self.landscape_conv_block(static_data)  # -> [B, F, H_s, W_s]
+
+        # Replicate static features along the temporal dimension
+        T = img.shape[-1]
+        static_features = static_features.unsqueeze(-1).expand(-1, -1, -1, -1, T)  # -> [B, F, H_s, W_s, T]
+
         # Concatenate along the Channel (C) dimension (dim=1)
         img = torch.cat([img, static_data], dim=1)  # [B, C=9, H, W, T=4]
         window_size = self.window_size
@@ -115,6 +132,10 @@ class SwinUnet3D(pl.LightningModule):
 
 
         down12_1 = self.enc12(img)  # (B,C, X//4, Y//4, Z//4)
+        # Fusion
+        fused = torch.cat([down12_1, static_features], dim=1)  # -> [B, C_dynamic + F, 128, 128, T]
+        # Project concatenated features back to a desired channel count using a 1x1 convolution.
+        fused = self.fusion_conv(fused)
         down3 = self.enc3(down12_1)  # (B, 2C,X//8, Y//8, Z//8)
         down4 = self.enc4(down3)  # (B, 4C,X//16, Y//16, Z//16)
         features = self.enc5(down4)  # (B, 8C,X//32, Y//32, Z//32)
@@ -129,9 +150,9 @@ class SwinUnet3D(pl.LightningModule):
 
         up12 = self.dec12(up3)  # (B,C, X//4, Y//4, Z// 4)
         # up3和 down1融合
-        up12 = self.converge12(up12, down12_1)  # (B,C, X//4, Y//4, Z//4)
+        up12 = self.converge12(up12, fused)  # (B,C, X//4, Y//4, Z//4)
 
-        out = self.final(up12)  # (B,num_classes, X, Y, Z)
+        out = self.final(up12)  # (B, num_classes, X, Y, Z)
         out = self.out(out)
         # Slice last temporal step
         out = out[..., -1]

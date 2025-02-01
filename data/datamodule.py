@@ -40,9 +40,8 @@ def collate_fn(batch):
         wind = wind.T
         padded_wind_inputs[i, :, -wind.shape[1]:] = wind  # Align wind with fire
 
-    # 5. Stack static_data and isochrone_masks (assume fixed spatial dimensions)
-    static_data = torch.stack(static_data)  # [B, 1, C, H, W]
-    isochrone_masks = torch.stack(isochrone_masks)  # [B, 1, H, W]
+    isochrone_masks = torch.stack(isochrone_masks)
+    static_data = torch.stack(static_data)
 
     return padded_fire_sequences, static_data, padded_wind_inputs, isochrone_masks, valid_tokens
 

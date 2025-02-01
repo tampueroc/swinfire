@@ -52,8 +52,8 @@ class SwinUnet3D(pl.LightningModule):
                     out_features=64
         )
         self.fusion_conv = nn.Conv3d(
-            in_channels=8+1,
-            out_channels=1,
+            in_channels=hidden_dim+64,
+            out_channels=hidden_dim,
             kernel_size=1
         )
 
@@ -110,16 +110,6 @@ class SwinUnet3D(pl.LightningModule):
         self.init_weight()
 
     def forward(self, img, static_data):
-        # Process static_data with the dedicated CNN branch
-        # static_data: [B, 8, H, W]
-        static_features = self.landscape_conv_block(static_data)  # -> [B, F, H_s, W_s]
-
-        # Replicate static features along the temporal dimension
-        T = img.shape[-1]
-        static_features = static_features.unsqueeze(-1).expand(-1, -1, -1, -1, T)  # -> [B, F, H_s, W_s, T]
-
-        # Concatenate along the Channel (C) dimension (dim=1)
-        img = torch.cat([img, static_data], dim=1)  # [B, C=9, H, W, T=4]
         window_size = self.window_size
         assert type(window_size) is int or len(window_size) == 3, 'window_size must be 1 or 3 dimension'
         if type(window_size) is int:
@@ -130,13 +120,20 @@ class SwinUnet3D(pl.LightningModule):
         assert x_s % (x_ws * 32) == 0, f'x-axis size ({x_s}) must be divisible by x_window_size * 32 ({x_ws * 32}).'
         assert y_s % (y_ws * 32) == 0, f'y-axis size ({y_s}) must be divisible by y_window_size * 32 ({y_ws * 32}).'
 
+        # Process static_data with the dedicated CNN branch
+        # static_data: [B, 8, H, W]
+        static_features = self.landscape_conv_block(static_data)  # -> [B, F, H_s, W_s]
+
+        # Replicate static features along the temporal dimension
+        T = img.shape[-1]
+        static_features = static_features.unsqueeze(-1).expand(-1, -1, -1, -1, T)  # -> [B, F, H_s, W_s, T]
 
         down12_1 = self.enc12(img)  # (B,C, X//4, Y//4, Z//4)
         # Fusion
         fused = torch.cat([down12_1, static_features], dim=1)  # -> [B, C_dynamic + F, 128, 128, T]
         # Project concatenated features back to a desired channel count using a 1x1 convolution.
         fused = self.fusion_conv(fused)
-        down3 = self.enc3(down12_1)  # (B, 2C,X//8, Y//8, Z//8)
+        down3 = self.enc3(fused)  # (B, 2C,X//8, Y//8, Z//8)
         down4 = self.enc4(down3)  # (B, 4C,X//16, Y//16, Z//16)
         features = self.enc5(down4)  # (B, 8C,X//32, Y//32, Z//32)
 

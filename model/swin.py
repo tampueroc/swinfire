@@ -11,7 +11,7 @@ from .encoder import Encoder
 from .decoder import Decoder, Converge
 from .patch_layers import FinalExpand3D
 from .losses import WeightedFocalLoss
-from timm.models.layers import trunc_normal_
+from timm.layers import trunc_normal_
 
 class SwinUnet3D(pl.LightningModule):
     def __init__(self, *, hidden_dim, layers, heads, in_channel=1, num_classes=2, head_dim=32,

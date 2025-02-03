@@ -18,6 +18,7 @@ class SwinUnet3D(pl.LightningModule):
                  relative_pos_embedding=True, dropout: float = 0.0, skip_style='stack',
                  stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce"):  # second_to_last_channels
         super().__init__()
+        self.save_hyperparameters('loss_fn')
 
         self.learning_rate = learning_rate
          # Metrics for training

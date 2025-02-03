@@ -96,3 +96,18 @@ def create_mask3D(window_size: Union[int, List[int]], displacement: Union[int, L
     return mask
 
 
+
+class StaticProjector(nn.Module):
+    """Projects static data to match encoder stage dimensions."""
+    def __init__(self, in_channels, out_channels, spatial_size):
+        super().__init__()
+        self.spatial_size = spatial_size  # Target (H, W)
+        self.proj = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.AdaptiveAvgPool2d(spatial_size),
+            nn.GELU()
+        )
+
+    def forward(self, static_data):
+        # static_data: [B, C_static, H, W]
+        return self.proj(static_data)  # [B, out_channels, H_target, W_target]

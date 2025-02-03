@@ -17,12 +17,13 @@ class SwinUnet3D(pl.LightningModule):
     def __init__(self, *, hidden_dim, layers, heads, in_channel=1, num_classes=2, head_dim=32,
                  window_size: Union[int, List[int]] = 4, downscaling_factors=(4, 2, 2, 2),
                  relative_pos_embedding=True, dropout: float = 0.0, skip_style='stack',
-                 stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce"):  # second_to_last_channels
+                 stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce", static_channels: int = 0):  # second_to_last_channels
         super().__init__()
         self.save_hyperparameters('loss_fn')
 
-        example_shape = (4, in_channel, 512, 512, 4)  # Batch size 4, example spatial size, temporal depth
-        self.example_input_array = torch.randn(example_shape, dtype=self.device)
+        example_shape_fire = (4, in_channel, 512, 512, 4)  # Batch size 4, example spatial size, temporal depth
+        example_shape_static = (4, static_channels, 512, 512)
+        self.example_input_array = (torch.randn(example_shape_fire, dtype=torch.float32), torch.rand(example_shape_static, dtype=torch.float32))
 
         self.learning_rate = learning_rate
          # Metrics for training
@@ -52,23 +53,22 @@ class SwinUnet3D(pl.LightningModule):
         self.enc12 = Encoder(in_dims=in_channel, hidden_dimension=hidden_dim, layers=layers[0],
                              downscaling_factor=downscaling_factors[0], num_heads=heads[0],
                              head_dim=head_dim, window_size=window_size, dropout=dropout,
-                             relative_pos_embedding=relative_pos_embedding)
+                             relative_pos_embedding=relative_pos_embedding, static_channels=8, expected_H=128, expected_W=128)
         self.enc3 = Encoder(in_dims=hidden_dim, hidden_dimension=hidden_dim * 2,
                             layers=layers[1],
                             downscaling_factor=downscaling_factors[1], num_heads=heads[1],
                             head_dim=head_dim, window_size=window_size, dropout=dropout,
-                            relative_pos_embedding=relative_pos_embedding)
+                            relative_pos_embedding=relative_pos_embedding, static_channels=8, expected_H=64, expected_W=64)
         self.enc4 = Encoder(in_dims=hidden_dim * 2, hidden_dimension=hidden_dim * 4,
                             layers=layers[2],
                             downscaling_factor=downscaling_factors[2], num_heads=heads[2],
                             head_dim=head_dim, window_size=window_size, dropout=dropout,
-                            relative_pos_embedding=relative_pos_embedding)
+                            relative_pos_embedding=relative_pos_embedding, static_channels=8, expected_H=32, expected_W=32)
         self.enc5 = Encoder(in_dims=hidden_dim * 4, hidden_dimension=hidden_dim * 8,
                             layers=layers[3],
                             downscaling_factor=downscaling_factors[3], num_heads=heads[3],
                             head_dim=head_dim, window_size=window_size, dropout=dropout,
-                            relative_pos_embedding=relative_pos_embedding)
-
+                            relative_pos_embedding=relative_pos_embedding, static_channels=8, expected_H=16, expected_W=16)
         self.dec4 = Decoder(in_dims=hidden_dim * 8, out_dims=hidden_dim * 4,
                             layers=layers[2],
                             up_scaling_factor=downscaling_factors[3], num_heads=heads[2],
@@ -101,7 +101,7 @@ class SwinUnet3D(pl.LightningModule):
         # 参数初始化
         self.init_weight()
 
-    def forward(self, img):
+    def forward(self, img, static_data):
         window_size = self.window_size
         assert type(window_size) is int or len(window_size) == 3, 'window_size must be 1 or 3 dimension'
         if type(window_size) is int:
@@ -113,10 +113,10 @@ class SwinUnet3D(pl.LightningModule):
         assert y_s % (y_ws * 32) == 0, f'y-axis size ({y_s}) must be divisible by y_window_size * 32 ({y_ws * 32}).'
 
 
-        down12_1 = self.enc12(img)  # (B,C, X//4, Y//4, Z//4)
-        down3 = self.enc3(down12_1)  # (B, 2C,X//8, Y//8, Z//8)
-        down4 = self.enc4(down3)  # (B, 4C,X//16, Y//16, Z//16)
-        features = self.enc5(down4)  # (B, 8C,X//32, Y//32, Z//32)
+        down12_1 = self.enc12(img, static_data)  # (B,C, X//4, Y//4, Z//4)
+        down3 = self.enc3(down12_1, static_data)  # (B, 2C,X//8, Y//8, Z//8)
+        down4 = self.enc4(down3, static_data)  # (B, 4C,X//16, Y//16, Z//16)
+        features = self.enc5(down4, static_data)  # (B, 8C,X//32, Y//32, Z//32)
 
         up4 = self.dec4(features)  # (B, 8C, X//16, Y//16, Z//16 )
         # up1和 down3融合
@@ -149,7 +149,7 @@ class SwinUnet3D(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, *isochrone_mask = batch
         isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq)
+        pred = self(fire_seq, static_data)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("train_loss", loss)
@@ -169,7 +169,7 @@ class SwinUnet3D(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, *isochrone_mask = batch
         isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq)
+        pred = self(fire_seq, static_data)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("val_loss", loss)

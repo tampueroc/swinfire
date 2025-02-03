@@ -61,6 +61,7 @@ def main(args):
     # Model
     model = SwinUnet3D(
         in_channel=model_cfg['in_channels'],
+        static_channels=model_cfg['static_channels'],
         hidden_dim=model_cfg['hidden_dim'],
         layers=model_cfg['layers'],
         downscaling_factors=model_cfg['downscaling_factors'],

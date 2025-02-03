@@ -3,12 +3,13 @@ from typing import Union, List
 from einops.layers.torch import Rearrange
 
 from .patch_layers import PatchMerging3D
-from .blocks import ConvBlock, SwinBlock3D
+from .blocks import ConvBlock, SwinBlock3D, ConditionalGate
+from .utils import StaticProjector
 
 
 class Encoder(nn.Module):
     def __init__(self, in_dims, hidden_dimension, layers, downscaling_factor, num_heads, head_dim,
-                 window_size: Union[int, List[int]], relative_pos_embedding: bool = True, dropout: float = 0.0):
+                 window_size: Union[int, List[int]], relative_pos_embedding: bool = True, dropout: float = 0.0, static_channels: int = 0, expected_H: int = 0, expected_W: int = 0):
         super().__init__()
         assert layers % 2 == 0, 'Stage layers need to be divisible by 2 for regular and shifted block.'
 
@@ -29,7 +30,17 @@ class Encoder(nn.Module):
             ]))
         self.re2 = Rearrange('b  h w d c -> b c h w d')
 
-    def forward(self, x):
+        self.static_projector = StaticProjector(
+            in_channels=static_channels,
+            out_channels=hidden_dimension,
+            spatial_size=(expected_H, expected_W)  # Based on downscaling
+        )
+        self.gate = ConditionalGate(
+            feat_dim=hidden_dimension,
+            static_dim=hidden_dimension
+        )
+
+    def forward(self, x, static_data=None):
         x = self.patch_partition(x)
         x2 = self.conv_block(x)  # Short dependencies
 
@@ -38,6 +49,10 @@ class Encoder(nn.Module):
             x = regular_block(x)
             x = shifted_block(x)
         x = self.re2(x)
+
+        if static_data is not None:
+            static_proj = self.static_projector(static_data)
+            x = self.gate(x, static_proj)  # Fuse features
 
         x = x + x2  # Long and short length dependencies
         return x

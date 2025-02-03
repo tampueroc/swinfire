@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 from typing import Union, List
 
 from .utils import Residual3D, PreNorm3D, Norm
@@ -40,3 +41,22 @@ class ConvBlock(nn.Module):
         x = self.net(x) * x2
         return x
 
+
+class ConditionalGate(nn.Module):
+    """Dynamically fuses encoder features with static data."""
+    def __init__(self, feat_dim, static_dim):
+        super().__init__()
+        self.fusion = nn.Sequential(
+            nn.Conv3d(feat_dim + static_dim, feat_dim // 2, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.Conv3d(feat_dim // 2, feat_dim, kernel_size=3, padding=1),
+            nn.Sigmoid()  # Outputs gating mask ∈ [0,1]
+        )
+
+    def forward(self, x, static_proj):
+        # x: [B, C, H, W] (encoder features)
+        # static_proj: [B, C_static_proj, H, W]
+        static_proj = static_proj.unsqueeze(-1).expand(-1, -1, -1, -1, x.size(-1))
+        fused = torch.cat([x, static_proj], dim=1)
+        gate = self.fusion(fused)
+        return x * gate + static_proj * (1 - gate)  # Blended features

@@ -1,7 +1,7 @@
 data_dir: data/deep_crown_dataset/organized_spreads
 sequence_length: 5     # Sequence length for each sample
-use_collate_fn: false
-batch_size: 32          # Batch size
+use_collate_fn: true
+batch_size: 4          # Batch size
 num_workers: 4          # Number of data loader workers
 drop_last: true         # Whether to drop the last incomplete batch
 pin_memory: true        # Enable pin_memory for data loader

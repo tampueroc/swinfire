@@ -1,5 +1,6 @@
 from torch import nn
 from typing import List, Union
+import torch
 import numpy as np
 import torch.optim as optim
 import pytorch_lightning as pl
@@ -19,6 +20,9 @@ class SwinUnet3D(pl.LightningModule):
                  stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce"):  # second_to_last_channels
         super().__init__()
         self.save_hyperparameters('loss_fn')
+
+        example_shape = (4, in_channel, 512, 512, 4)  # Batch size 1, example spatial size, temporal depth
+        self.example_input_array = torch.randn(example_shape, dtype=torch.float32)
 
         self.learning_rate = learning_rate
          # Metrics for training

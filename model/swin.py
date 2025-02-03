@@ -21,8 +21,8 @@ class SwinUnet3D(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters('loss_fn')
 
-        example_shape = (4, in_channel, 512, 512, 4)  # Batch size 1, example spatial size, temporal depth
-        self.example_input_array = torch.randn(example_shape, dtype=torch.float32)
+        example_shape = (4, in_channel, 512, 512, 4)  # Batch size 4, example spatial size, temporal depth
+        self.example_input_array = torch.randn(example_shape, dtype=self.device)
 
         self.learning_rate = learning_rate
          # Metrics for training

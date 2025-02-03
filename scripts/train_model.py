@@ -73,6 +73,7 @@ def main(args):
         num_classes=model_cfg['num_classes'],
         loss_fn=model_cfg['loss_fn']
     )
+    model.hparams.update(datamodule.hparams)
 
     # Trainer
     trainer = pl.Trainer(

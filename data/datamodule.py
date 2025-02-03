@@ -76,6 +76,7 @@ class FireDataModule(pl.LightningDataModule):
             drop_last (bool): Whether to drop the last incomplete batch in each DataLoader.
         """
         super().__init__()
+        self.save_hyperparameters('sequence_length', 'batch_size')
         self.data_dir = data_dir
         self.sequence_length = sequence_length
         self.transform = transform

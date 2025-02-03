@@ -23,9 +23,11 @@ class Decoder(nn.Module):
             self.swin_layers.append(nn.ModuleList([
                 SwinBlock3D(dim=out_dims, heads=num_heads, head_dim=head_dim, mlp_dim=out_dims * 4,
                             shifted=False, window_size=window_size, relative_pos_embedding=relative_pos_embedding,
+                            wind_context_dim=None,
                             dropout=dropout),
                 SwinBlock3D(dim=out_dims, heads=num_heads, head_dim=head_dim, mlp_dim=out_dims * 4,
                             shifted=True, window_size=window_size, relative_pos_embedding=relative_pos_embedding,
+                            wind_context_dim=None,
                             dropout=dropout),
             ]))
         self.re2 = Rearrange('b h w d c -> b c h w d')

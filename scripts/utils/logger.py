@@ -5,7 +5,7 @@ class Logger:
     Manages logging with TensorBoard.
     """
     @staticmethod
-    def get_tensorboard_logger(save_dir, name="default", log_graph=True):
+    def get_tensorboard_logger(save_dir, name="default", log_graph=False):
         """
         Creates a TensorBoard logger.
         Args:
@@ -15,4 +15,4 @@ class Logger:
         Returns:
             TensorBoardLogger: Configured TensorBoard logger.
         """
-        return TensorBoardLogger(save_dir=save_dir, name=name, log_graph=True)
+        return TensorBoardLogger(save_dir=save_dir, name=name, log_graph=log_graph)

@@ -81,3 +81,105 @@ class BCEWithWeights(nn.Module):
         else:
             # Option B: No pos_weight
             return F.binary_cross_entropy_with_logits(inputs, targets)
+
+
+class AsymFocalTverskyLoss(nn.Module):
+    def __init__(self, delta=0.6, gamma=0.5, smooth=1e-6):
+        """
+        Asymmetric Focal Tversky Loss for imbalanced segmentation.
+
+        Args:
+            delta (float): Controls the weighting of false positives and false negatives.
+            gamma (float): Focal parameter controlling down-weighting of easy examples.
+            smooth (float): Smoothing constant to avoid division by zero.
+        """
+        super(AsymFocalTverskyLoss, self).__init__()
+        self.delta = delta
+        self.gamma = gamma
+        self.smooth = smooth
+
+    def forward(self, inputs, targets):
+        """
+        Compute the asymmetric focal Tversky loss.
+
+        Args:
+            inputs (Tensor): Model predictions (logits), shape [B, C, H, W].
+            targets (Tensor): Ground truth (binary), shape [B, C, H, W].
+
+        Returns:
+            Tensor: Loss value.
+        """
+        inputs = torch.sigmoid(inputs)  # Convert logits to probabilities
+        tp = torch.sum(targets * inputs, dim=(2, 3))
+        fn = torch.sum(targets * (1 - inputs), dim=(2, 3))
+        fp = torch.sum((1 - targets) * inputs, dim=(2, 3))
+
+        tversky_index = (tp + self.smooth) / (tp + self.delta * fn + (1 - self.delta) * fp + self.smooth)
+        loss = torch.mean((1 - tversky_index) ** self.gamma)
+
+        return loss
+
+
+class AsymFocalLoss(nn.Module):
+    def __init__(self, delta=0.6, gamma=2.0):
+        """
+        Asymmetric Focal Loss for binary segmentation.
+
+        Args:
+            delta (float): Controls weight given to false positives and false negatives.
+            gamma (float): Focal parameter controlling down-weighting of easy examples.
+        """
+        super(AsymFocalLoss, self).__init__()
+        self.delta = delta
+        self.gamma = gamma
+
+    def forward(self, inputs, targets):
+        """
+        Compute the asymmetric focal loss.
+
+        Args:
+            inputs (Tensor): Model predictions (logits), shape [B, C, H, W].
+            targets (Tensor): Ground truth (binary), shape [B, C, H, W].
+
+        Returns:
+            Tensor: Loss value.
+        """
+        inputs = torch.sigmoid(inputs)  # Convert logits to probabilities
+        ce_loss = F.binary_cross_entropy(inputs, targets, reduction='none')
+
+        # Compute the focal scaling factor
+        focal_factor = torch.pow(1 - inputs, self.gamma)
+        loss = self.delta * ce_loss * focal_factor * targets + (1 - self.delta) * ce_loss * (1 - targets)
+
+        return loss.mean()
+
+
+class AsymUnifiedFocalLoss(nn.Module):
+    def __init__(self, weight=0.5, delta=0.6, gamma=0.5):
+        """
+        Unified Asymmetric Focal Loss combining Focal Tversky Loss and Focal Loss.
+
+        Args:
+            weight (float): Lambda parameter controlling the mix of loss functions.
+            delta (float): Controls weight given to false positives and false negatives.
+            gamma (float): Focal parameter controlling down-weighting of easy examples.
+        """
+        super(AsymUnifiedFocalLoss, self).__init__()
+        self.weight = weight
+        self.tversky_loss = AsymFocalTverskyLoss(delta=delta, gamma=gamma)
+        self.focal_loss = AsymFocalLoss(delta=delta, gamma=gamma)
+
+    def forward(self, inputs, targets):
+        """
+        Compute the unified asymmetric focal loss.
+
+        Args:
+            inputs (Tensor): Model predictions (logits), shape [B, C, H, W].
+            targets (Tensor): Ground truth (binary), shape [B, C, H, W].
+
+        Returns:
+            Tensor: Loss value.
+        """
+        loss = self.weight * self.tversky_loss(inputs, targets) + (1 - self.weight) * self.focal_loss(inputs, targets)
+        return loss
+

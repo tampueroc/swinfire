@@ -9,4 +9,8 @@ window_size: 4
 dropout: 0.1                    # Dropout rate
 relative_pos_embedding: true    # Enable relative positional embedding
 num_classes: 1                  # Number of output classes
-loss_fn: focal_loss
+loss_fn: unified_focal_loss
+loss_fn_settings:
+  weight: 0.5
+  alpha: 0.6
+  gamma: 0.5

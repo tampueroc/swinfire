@@ -11,7 +11,7 @@ from .encoder import Encoder
 from .decoder import Decoder, Converge
 from .patch_layers import FinalExpand3D
 from .blocks import WindContextEncoder
-from .losses import WeightedFocalLoss
+from .losses import WeightedFocalLoss, AsymUnifiedFocalLoss
 from timm.layers import trunc_normal_
 
 class SwinUnet3D(pl.LightningModule):
@@ -19,9 +19,9 @@ class SwinUnet3D(pl.LightningModule):
                  window_size: Union[int, List[int]] = 4, downscaling_factors=(4, 2, 2, 2),
                  wind_context_dim=64,
                  relative_pos_embedding=True, dropout: float = 0.0, skip_style='stack',
-                 stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce", static_channels: int = 0):  # second_to_last_channels
+                 stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce", loss_fn_settings: dict = {}, static_channels: int = 0):  # second_to_last_channels
         super().__init__()
-        self.save_hyperparameters('loss_fn')
+        self.save_hyperparameters('loss_fn', 'loss_fn_settings', 'learning_rate', 'window_size')
 
         example_shape_fire = (4, in_channel, 512, 512, 4)  # Batch size 4, example spatial size, temporal depth
         example_shape_static = (4, static_channels, 512, 512)
@@ -48,6 +48,12 @@ class SwinUnet3D(pl.LightningModule):
             self.loss_fn = WeightedFocalLoss(
                     alpha=0.95,
                     gamma=2
+            )
+        elif loss_fn == "unified_focal_loss":
+            self.loss_fn = AsymUnifiedFocalLoss(
+                    weight=loss_fn_settings.get('weight', 0.5),
+                    delta=loss_fn_settings.get('delta', 0.6),
+                    gamma=loss_fn_settings.get('gamma', 0.5)
             )
 
         self.dsf = downscaling_factors

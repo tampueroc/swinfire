@@ -71,7 +71,8 @@ def main(args):
         dropout=model_cfg['dropout'],
         relative_pos_embedding=model_cfg['relative_pos_embedding'],
         num_classes=model_cfg['num_classes'],
-        loss_fn=model_cfg['loss_fn']
+        loss_fn=model_cfg['loss_fn'],
+        loss_fn_settings=model_cfg['loss_fn_settings']
     )
     model.hparams.update(datamodule.hparams)
     model.save_hyperparameters()

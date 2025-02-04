@@ -74,6 +74,7 @@ def main(args):
         loss_fn=model_cfg['loss_fn']
     )
     model.hparams.update(datamodule.hparams)
+    model.save_hyperparameters()
 
     # Trainer
     trainer = pl.Trainer(

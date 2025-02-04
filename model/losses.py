@@ -144,8 +144,8 @@ class AsymFocalLoss(nn.Module):
         Returns:
             Tensor: Loss value.
         """
+        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
         inputs = torch.sigmoid(inputs)  # Convert logits to probabilities
-        ce_loss = F.binary_cross_entropy(inputs, targets, reduction='none')
 
         # Compute the focal scaling factor
         focal_factor = torch.pow(1 - inputs, self.gamma)

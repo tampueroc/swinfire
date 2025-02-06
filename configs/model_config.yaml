@@ -1,6 +1,6 @@
 in_channels: 1                  # Input Channels (Fire State)
 static_channels: 8
-hidden_dim: 96                 # Hidden dimensions of the model
+hidden_dim: 144                 # Hidden dimensions of the model
 layers: [2, 2, 4, 2]            # Number of layers in each stage
 downscaling_factors: [4, 2, 2, 2]  # Downscaling factors for each stage
 heads: [3, 6, 9, 12]            # Number of attention heads

@@ -22,7 +22,8 @@ def main(args):
     if logger_cfg['enabled'] is True:
         logger = Logger.get_tensorboard_logger(
             save_dir=logger_cfg['dir'],
-            name=logger_cfg['name']
+            name=logger_cfg['name'],
+            default_hp_metric=logger_cfg['default_hp_metric']
         )
     else:
         logger = None

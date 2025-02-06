@@ -41,7 +41,10 @@ class FinalMetricsCallback(pl.Callback):
         with torch.no_grad():
             for batch in dataloader:
                 fire_seq, static_data, wind_inputs, *isochrone_mask = batch
-                isochrone_mask = isochrone_mask[0]
+                fire_seq = fire_seq.to(model.device)
+                static_data = static_data.to(model.device)
+                wind_inputs = wind_inputs.to(model.device)
+                isochrone_mask = isochrone_mask[0].to(model.device)
                 pred = model(fire_seq, static_data, wind_inputs)
                 pred = pred[..., 56:-56, 56:-56]  # Cropping like in validation_step
 
@@ -57,13 +60,14 @@ class FinalMetricsCallback(pl.Callback):
             "f1": f1.compute().item(),
         }
 
-    def on_train_end(self, trainer, pl_module):
+    def on_train_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Called at the end of training to log final metrics under hparams."""
+        tensorboard_logger = pl_module.logger.experiment
 
         if self.on_training_data and trainer.train_dataloader is not None:
             train_metrics = self.compute_metrics(pl_module, trainer.train_dataloader)
             for k, v in train_metrics.items():
-                trainer.logger.log(f"hp/train_{k}", v)
+                tensorboard_logger.add_scalar(f"hp/train_{k}", v)
 
         if self.on_validation_data:
             val_loader = (
@@ -72,7 +76,7 @@ class FinalMetricsCallback(pl.Callback):
             if val_loader is not None:
                 val_metrics = self.compute_metrics(pl_module, val_loader)
                 for k, v in val_metrics.items():
-                    trainer.logger.log(f"hp/val_{k}", v)
+                    tensorboard_logger.add_scalar(f"hp/val_{k}", v)
 
         print("Logged Final Metrics.")
 

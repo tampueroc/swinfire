@@ -10,6 +10,7 @@ logger:
   enabled: true
   dir: logs/            # Directory to save logs
   name: swin_hidden144_lr3e-4   # Name for the logger
+  default_hp_metric: false
 
 callbacks:
   early_stopper:

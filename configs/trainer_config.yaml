@@ -24,3 +24,8 @@ callbacks:
 
   logging_callback:
     enabled: true       # Enable average loss per epoch log
+
+  final_metrics_callback:
+    enabled: true
+    on_training_data: false
+    on_validation_data: true

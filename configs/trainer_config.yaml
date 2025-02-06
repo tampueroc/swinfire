@@ -21,3 +21,6 @@ callbacks:
 
   image_logger:
     enabled: true       # Enable logging of image predictions
+
+  logging_callback:
+    enabled: true       # Enable average loss per epoch log

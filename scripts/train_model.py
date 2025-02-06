@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 
 from utils import Logger
 from data import FireDataModule
-from callbacks import EarlyStoppingHandler, ImageLoggerHandler
+from callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback
 from model.swin import SwinUnet3D
 
 def load_yaml_config(path):
@@ -44,6 +44,10 @@ def main(args):
     if image_logger_cfg.get('enabled', False) is True:
         image_prediction_logger_callback = ImageLoggerHandler()
         callbacks.append(image_prediction_logger_callback)
+    logging_callback = callbacks_cfg['logging_callback']
+    if logging_callback.get('enabled', False) is True:
+        logging_callback = LoggingCallback()
+        callbacks.append(logging_callback)
 
     # Datamodule
     datamodule = FireDataModule(

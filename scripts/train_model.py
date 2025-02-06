@@ -74,6 +74,7 @@ def main(args):
         window_size=model_cfg['window_size'],
         dropout=model_cfg['dropout'],
         relative_pos_embedding=model_cfg['relative_pos_embedding'],
+        learning_rate=model_cfg['learning_rate'],
         num_classes=model_cfg['num_classes'],
         loss_fn=model_cfg['loss_fn'],
         loss_fn_settings=model_cfg['loss_fn_settings']

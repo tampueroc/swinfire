@@ -9,7 +9,7 @@ accumulate_grad_batches: 4
 logger:
   enabled: true
   dir: logs/            # Directory to save logs
-  name: training_logs   # Name for the logger
+  name: swin_hidden144_lr3e-4   # Name for the logger
 
 callbacks:
   early_stopper:

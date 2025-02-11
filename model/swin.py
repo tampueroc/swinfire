@@ -34,12 +34,14 @@ class SwinUnet3D(pl.LightningModule):
         self.train_precision = torchmetrics.classification.BinaryPrecision()
         self.train_recall = torchmetrics.classification.BinaryRecall()
         self.train_f1 = torchmetrics.classification.BinaryF1Score()
+        self.train_jaccard_index = torchmetrics.classification.BinaryJaccardIndex()
 
         # Metrics for training
         self.val_accuracy = torchmetrics.classification.BinaryAccuracy()
         self.val_precision = torchmetrics.classification.BinaryPrecision()
         self.val_recall = torchmetrics.classification.BinaryRecall()
         self.val_f1 = torchmetrics.classification.BinaryF1Score()
+        self.val_jaccard_index = torchmetrics.classification.BinaryJaccardIndex()
 
         # Loss
         if loss_fn == "bce":
@@ -171,11 +173,13 @@ class SwinUnet3D(pl.LightningModule):
         self.train_precision(pred, isochrone_mask)
         self.train_recall(pred, isochrone_mask)
         self.train_f1(pred, isochrone_mask)
+        self.train_jaccard_index(pred, isochrone_mask)
 
         self.log("train_accuracy", self.train_accuracy, on_step=True, on_epoch=False)
         self.log("train_precision", self.train_precision, on_step=True, on_epoch=False)
         self.log("train_recall", self.train_recall, on_step=True, on_epoch=False)
         self.log("train_f1", self.train_f1, on_step=True, on_epoch=False)
+        self.log("train_jaccard_index", self.train_jaccard_index, on_step=True, on_epoch=False)
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
     def validation_step(self, batch, batch_idx):
@@ -191,11 +195,13 @@ class SwinUnet3D(pl.LightningModule):
         self.val_precision(pred, isochrone_mask)
         self.val_recall(pred, isochrone_mask)
         self.val_f1(pred, isochrone_mask)
+        self.val_jaccard_index(pred, isochrone_mask)
 
         self.log("val_accuracy", self.val_accuracy, on_step=False, on_epoch=True)
         self.log("val_precision", self.val_precision, on_step=False, on_epoch=True)
         self.log("val_recall", self.val_recall, on_step=False, on_epoch=True)
         self.log("val_f1", self.val_f1, on_step=False, on_epoch=True)
+        self.log("val_jaccard_index", self.val_jaccard_index, on_step=False, on_epoch=True)
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
     def configure_optimizers(self):

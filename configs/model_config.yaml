@@ -11,6 +11,11 @@ relative_pos_embedding: true    # Enable relative positional embedding
 num_classes: 1                  # Number of output classes
 loss_fn: unified_focal_loss
 learning_rate: 0.0003
+lr_scheduler:
+  scheduler: reduce_lr_on_plateu
+  monitor: val_loss
+  patience: 7
+  factor: 0.5
 loss_fn_settings:
   weight: 0.5
   alpha: 0.6

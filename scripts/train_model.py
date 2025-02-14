@@ -75,6 +75,7 @@ def main(args):
         in_channel=model_cfg['in_channels'],
         static_channels=model_cfg['static_channels'],
         hidden_dim=model_cfg['hidden_dim'],
+        lr_scheduler=model_cfg['lr_scheduler'],
         layers=model_cfg['layers'],
         downscaling_factors=model_cfg['downscaling_factors'],
         heads=model_cfg['heads'],

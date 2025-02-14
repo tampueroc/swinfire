@@ -18,6 +18,7 @@ class SwinUnet3D(pl.LightningModule):
     def __init__(self, *, hidden_dim, layers, heads, in_channel=1, num_classes=2, head_dim=32,
                  window_size: Union[int, List[int]] = 4, downscaling_factors=(4, 2, 2, 2),
                  wind_context_dim=64,
+                 lr_scheduler: dict = {},
                  relative_pos_embedding=True, dropout: float = 0.0, skip_style='stack',
                  stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce", loss_fn_settings: dict = {}, static_channels: int = 0):  # second_to_last_channels
         super().__init__()
@@ -29,6 +30,8 @@ class SwinUnet3D(pl.LightningModule):
         self.example_input_array = (torch.randn(example_shape_fire, dtype=torch.float32), torch.rand(example_shape_static, dtype=torch.float32), torch.rand(example_shape_wind, dtype=torch.float32))
 
         self.learning_rate = learning_rate
+        self.lr_scheduler = lr_scheduler
+
          # Metrics for training
         self.train_accuracy = torchmetrics.classification.BinaryAccuracy()
         self.train_precision = torchmetrics.classification.BinaryPrecision()
@@ -205,5 +208,26 @@ class SwinUnet3D(pl.LightningModule):
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
     def configure_optimizers(self):
-        return optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+
+        scheduler = self.lr_scheduler.get('scheduler')
+        monitor = self.lr_scheduler.get('monitor', 'val_loss')  # Default to 'val_loss'
+        patience = self.lr_scheduler.get('patience', 7)  # Default value
+        factor = self.lr_scheduler.get('factor', 0.5)  # Default value
+
+        scheduler_obj = None
+        if scheduler == 'reduce_lr_on_plateau':
+            scheduler_obj = optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, factor=factor, patience=patience
+            )
+
+        optim_dict = {'optimizer': optimizer}
+        if scheduler_obj:
+            optim_dict['lr_scheduler'] = {
+                'scheduler': scheduler_obj,
+                'monitor': monitor
+            }
+
+        return optim_dict
+
 

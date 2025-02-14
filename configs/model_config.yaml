@@ -15,7 +15,7 @@ optimizer_settings:
   learning_rate: 0.0003
   weight_decay: 0
 lr_scheduler:
-  scheduler: reduce_lr_on_plateu
+  scheduler: reduce_lr_on_plateau
   monitor: val_loss
   patience: 3
   factor: 0.5

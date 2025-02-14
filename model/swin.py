@@ -19,17 +19,18 @@ class SwinUnet3D(pl.LightningModule):
                  window_size: Union[int, List[int]] = 4, downscaling_factors=(4, 2, 2, 2),
                  wind_context_dim=64,
                  lr_scheduler: dict = {},
+                 optimizer_settings: dict = {},
                  relative_pos_embedding=True, dropout: float = 0.0, skip_style='stack',
-                 stl_channels: int = 32, learning_rate: float = 3e-4, loss_fn: str = "bce", loss_fn_settings: dict = {}, static_channels: int = 0):  # second_to_last_channels
+                 stl_channels: int = 32, loss_fn: str = "bce", loss_fn_settings: dict = {}, static_channels: int = 0):  # second_to_last_channels
         super().__init__()
-        self.save_hyperparameters('loss_fn', 'loss_fn_settings', 'learning_rate', 'window_size')
+        self.save_hyperparameters('loss_fn', 'loss_fn_settings', 'optimizer_settings', 'lr_scheduler', 'window_size')
 
         example_shape_fire = (4, in_channel, 512, 512, 4)  # Batch size 4, example spatial size, temporal depth
         example_shape_static = (4, static_channels, 512, 512)
         example_shape_wind = (4, 2, 4)
         self.example_input_array = (torch.randn(example_shape_fire, dtype=torch.float32), torch.rand(example_shape_static, dtype=torch.float32), torch.rand(example_shape_wind, dtype=torch.float32))
 
-        self.learning_rate = learning_rate
+        self.optimizer_settings = optimizer_settings
         self.lr_scheduler = lr_scheduler
 
          # Metrics for training
@@ -208,7 +209,13 @@ class SwinUnet3D(pl.LightningModule):
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer_algorithm = self.optimizer_settings.get('optimizer', 'adam')
+        learning_rate = self.optimizer_settings.get('learning_rate', 1e-3)  # Default to 0.001
+        weight_decay = self.optimizer_settings.get('weight_decay', 0)
+        if optimizer_algorithm == 'adam':
+            optimizer = optim.Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        else:
+            raise ValueError(f"Unsupported optimizer: {optimizer_algorithm}")
 
         scheduler = self.lr_scheduler.get('scheduler')
         monitor = self.lr_scheduler.get('monitor', 'val_loss')  # Default to 'val_loss'

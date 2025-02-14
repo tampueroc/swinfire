@@ -10,11 +10,14 @@ dropout: 0.1                    # Dropout rate
 relative_pos_embedding: true    # Enable relative positional embedding
 num_classes: 1                  # Number of output classes
 loss_fn: unified_focal_loss
-learning_rate: 0.0003
+optimizer_settings:
+  optimizer: adam
+  learning_rate: 0.0003
+  weight_decay: 0
 lr_scheduler:
   scheduler: reduce_lr_on_plateu
   monitor: val_loss
-  patience: 7
+  patience: 3
   factor: 0.5
 loss_fn_settings:
   weight: 0.5

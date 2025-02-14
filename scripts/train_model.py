@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 from utils import Logger
 from data import FireDataModule
 from callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback, FinalMetricsCallback
-from lightning.pytorch.callbacks import LearningRateMonitor
 from model.swin import SwinUnet3D
 
 def load_yaml_config(path):
@@ -59,7 +58,7 @@ def main(args):
         callbacks.append(final_metrics_callback)
     learning_rate_monitor_callback_cfg = callbacks_cfg['learning_rate_monitor']
     if learning_rate_monitor_callback_cfg.get('enabled', False) is not False:
-        learning_rate_monitor = LearningRateMonitor()
+        learning_rate_monitor = pl.callbacks.LearningRateMonitor()
         callbacks.append(learning_rate_monitor)
 
     # Datamodule
@@ -88,7 +87,7 @@ def main(args):
         window_size=model_cfg['window_size'],
         dropout=model_cfg['dropout'],
         relative_pos_embedding=model_cfg['relative_pos_embedding'],
-        learning_rate=model_cfg['learning_rate'],
+        optimizer_settings=model_cfg['optimizer_settings'],
         num_classes=model_cfg['num_classes'],
         loss_fn=model_cfg['loss_fn'],
         loss_fn_settings=model_cfg['loss_fn_settings']

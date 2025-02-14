@@ -30,3 +30,6 @@ callbacks:
     enabled: true
     on_training_data: false
     on_validation_data: true
+
+  learning_rate_monitor:
+    enabled: true

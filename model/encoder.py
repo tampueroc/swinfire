@@ -52,7 +52,7 @@ class Encoder(nn.Module):
 
         if static_data is not None:
             static_proj = self.static_projector(static_data)
-            x = self.gate(x, static_proj)  # Fuse features
+            x, __ = self.gate(x, static_proj)  # Fuse features
 
         x = x + x2  # Long and short length dependencies
         return x

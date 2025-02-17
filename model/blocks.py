@@ -87,7 +87,7 @@ class ConditionalGate(nn.Module):
         static_proj = static_proj.unsqueeze(-1).expand(-1, -1, -1, -1, x.size(-1))
         fused = torch.cat([x, static_proj], dim=1)
         gate = self.fusion(fused)
-        return x * gate + static_proj * (1 - gate)  # Blended features
+        return (x * gate + static_proj * (1 - gate)), gate
 
 class WindContextEncoder(nn.Module):
     def __init__(self, in_dim=2, hidden_dim=64, num_heads=4):

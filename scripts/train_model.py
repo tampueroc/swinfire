@@ -1,6 +1,7 @@
 import yaml
 import argparse
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import LearningRateMonitor
 
 from utils import Logger
 from data import FireDataModule
@@ -58,7 +59,7 @@ def main(args):
         callbacks.append(final_metrics_callback)
     learning_rate_monitor_callback_cfg = callbacks_cfg['learning_rate_monitor']
     if learning_rate_monitor_callback_cfg.get('enabled', False) is not False:
-        learning_rate_monitor = pl.callbacks.LearningRateMonitor()
+        learning_rate_monitor = LearningRateMonitor()
         callbacks.append(learning_rate_monitor)
 
     # Datamodule

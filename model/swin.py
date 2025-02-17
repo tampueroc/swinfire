@@ -217,24 +217,22 @@ class SwinUnet3D(pl.LightningModule):
         else:
             raise ValueError(f"Unsupported optimizer: {optimizer_algorithm}")
 
-        scheduler = self.lr_scheduler.get('scheduler')
-        monitor = self.lr_scheduler.get('monitor', 'val_loss')  # Default to 'val_loss'
-        patience = self.lr_scheduler.get('patience', 7)  # Default value
-        factor = self.lr_scheduler.get('factor', 0.5)  # Default value
+        optim_dict = {'optimizer': optimizer}
 
-        scheduler_obj = None
+        scheduler = self.lr_scheduler.get('scheduler')
         if scheduler == 'reduce_lr_on_plateau':
             scheduler_obj = optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, factor=factor, patience=patience
+                optimizer,
+                factor=self.lr_scheduler.get('factor', 0.5),
+                patience=self.lr_scheduler.get('patience', 7),
+                threshold=self.lr_scheduler.get('threshold', 0.001),
+                cooldown=self.lr_scheduler.get('cooldown', 0)
             )
-
-        optim_dict = {'optimizer': optimizer}
-        if scheduler_obj:
             optim_dict['lr_scheduler'] = {
                 'scheduler': scheduler_obj,
-                'monitor': monitor
+                'monitor': self.lr_scheduler.get('monitor', 'val_loss'),
+                'frequency': self.lr_scheduler.get('frequency', 1)
             }
-
         return optim_dict
 
 

@@ -33,11 +33,11 @@ class FinalMetricsCallback(pl.Callback):
 
     def compute_metrics(self, model, dataloader):
         """Computes accuracy, precision, recall, and F1-score for a given dataset using torchmetrics."""
-        accuracy = classification.BinaryAccuracy()
-        precision = classification.BinaryPrecision()
-        recall = classification.BinaryRecall()
-        f1 = classification.BinaryF1Score()
-        jaccard_index = classification.BinaryJaccardIndex()
+        accuracy = classification.BinaryAccuracy().to(model.device)
+        precision = classification.BinaryPrecision().to(model.device)
+        recall = classification.BinaryRecall().to(model.device)
+        f1 = classification.BinaryF1Score().to(model.device)
+        jaccard_index = classification.BinaryJaccardIndex().to(model.device)
 
         model.eval()
         with torch.no_grad():

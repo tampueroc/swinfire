@@ -1,11 +1,12 @@
 import yaml
+import os
 import argparse
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from utils import Logger
 from data import FireDataModule
-from callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback, FinalMetricsCallback
+from callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback, FinalMetricsCallback, SaliencyMapCallback
 from model.swin import SwinUnet3D
 
 def load_yaml_config(path):
@@ -61,6 +62,21 @@ def main(args):
     if learning_rate_monitor_callback_cfg.get('enabled', False) is not False:
         learning_rate_monitor = LearningRateMonitor()
         callbacks.append(learning_rate_monitor)
+    saliency_maps_callback_cfg = callbacks_cfg['saliency_maps_callback']
+    if saliency_maps_callback_cfg.get('enabled', False) is True:
+        saliency_maps_callback = SaliencyMapCallback()
+        callbacks.append(saliency_maps_callback)
+    checkpoint_callback_cfg = callbacks_cfg['checkpoint_callback']
+    if checkpoint_callback_cfg.get('enabled', False) is True:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=checkpoint_callback_cfg.get('dirpath', 'logs/checkpoints'),
+            filename=logger_cfg["name"] + '{val_f1:.2f}_{val_precision:.2f}',
+            mode=checkpoint_callback_cfg['mode'],
+            monitor=checkpoint_callback_cfg['monitor'],
+            auto_insert_metric_name=True,
+            save_top_k=checkpoint_callback_cfg['save_top_k']
+        )
+        callbacks.append(checkpoint_callback)
 
     # Datamodule
     datamodule = FireDataModule(
@@ -113,7 +129,11 @@ def main(args):
             train_dataloaders=datamodule.train_dataloader(),
             val_dataloaders=datamodule.val_dataloader()
     )
-
+    try:
+        checkpoint_yaml_name = os.path.join(logger_cfg['dir'], 'checkpoint.yaml')
+        checkpoint_callback.to_yaml(checkpoint_yaml_name)
+    except Exception as e:
+        print(f'Exception in checkpoints as yaml {str(e)}')
 
 
 if __name__ == "__main__":

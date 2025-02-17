@@ -33,3 +33,13 @@ callbacks:
 
   learning_rate_monitor:
     enabled: true
+
+  saliency_maps_callback:
+    enabled: true
+
+  checkpoint_callback:
+    enabled: true
+    monitor: val_f1
+    mode: max
+    dirpath: logs/checkpoints
+    save_top_k: 5

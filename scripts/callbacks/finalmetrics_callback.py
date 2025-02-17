@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 import torchmetrics
 import torch
+from torchmetrics import classification
 
 class FinalMetricsCallback(pl.Callback):
     def __init__(self, on_training_data=True, on_validation_data=True):
@@ -20,22 +21,23 @@ class FinalMetricsCallback(pl.Callback):
 
         if self.on_training_data:
             metrics_init.update({
-                "hp/train_accuracy": 0, "hp/train_precision": 0, "hp/train_recall": 0, "hp/train_f1": 0
+                "hp/train_accuracy": 0, "hp/train_precision": 0, "hp/train_recall": 0, "hp/train_f1": 0, "hp/train_jaccard_index": 0
             })
 
         if self.on_validation_data:
             metrics_init.update({
-                "hp/val_accuracy": 0, "hp/val_precision": 0, "hp/val_recall": 0, "hp/val_f1": 0
+                "hp/val_accuracy": 0, "hp/val_precision": 0, "hp/val_recall": 0, "hp/val_f1": 0, "hp/val_jaccard_index": 0
             })
 
         trainer.logger.log_hyperparams(pl_module.hparams, metrics_init)
 
     def compute_metrics(self, model, dataloader):
         """Computes accuracy, precision, recall, and F1-score for a given dataset using torchmetrics."""
-        accuracy = torchmetrics.classification.BinaryAccuracy().to(model.device)
-        precision = torchmetrics.classification.BinaryPrecision().to(model.device)
-        recall = torchmetrics.classification.BinaryRecall().to(model.device)
-        f1 = torchmetrics.classification.BinaryF1Score().to(model.device)
+        accuracy = classification.BinaryAccuracy()
+        precision = classification.BinaryPrecision()
+        recall = classification.BinaryRecall()
+        f1 = classification.BinaryF1Score()
+        jaccard_index = classification.BinaryJaccardIndex()
 
         model.eval()
         with torch.no_grad():
@@ -52,12 +54,14 @@ class FinalMetricsCallback(pl.Callback):
                 precision.update(pred, isochrone_mask.int())
                 recall.update(pred, isochrone_mask.int())
                 f1.update(pred, isochrone_mask.int())
+                jaccard_index.update(pred, isochrone_mask.int())
 
         return {
             "accuracy": accuracy.compute().item(),
             "precision": precision.compute().item(),
             "recall": recall.compute().item(),
             "f1": f1.compute().item(),
+            "jaccard_index": jaccard_index.compute().item()
         }
 
     def on_train_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):

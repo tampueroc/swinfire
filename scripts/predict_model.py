@@ -1,0 +1,97 @@
+import yaml
+import os
+import argparse
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+
+from utils import Logger
+from data import FireDataModule
+from callbacks import SaliencyMapCallback
+from model.swin import SwinUnet3D
+
+def load_yaml_config(path):
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
+def main(args):
+    global_cfg = load_yaml_config(args.global_config)
+    model_cfg = load_yaml_config(args.model_config)
+    trainer_cfg = load_yaml_config(args.trainer_config)
+    data_cfg = load_yaml_config(args.data_config)
+
+    # Logger
+    logger_cfg = trainer_cfg['logger']
+    if logger_cfg['enabled'] is True:
+        logger = Logger.get_tensorboard_logger(
+            save_dir=logger_cfg['dir'],
+            name=logger_cfg['name'],
+            default_hp_metric=logger_cfg['default_hp_metric']
+        )
+    else:
+        logger = None
+
+    # Callbacks
+    callbacks_cfg = trainer_cfg['callbacks']
+    callbacks = []
+
+    saliency_maps_callback_cfg = callbacks_cfg['saliency_maps_callback']
+    if saliency_maps_callback_cfg.get('enabled', False) is True:
+        saliency_maps_callback = SaliencyMapCallback()
+        callbacks.append(saliency_maps_callback)
+    # Datamodule
+    datamodule = FireDataModule(
+        data_dir=data_cfg['data_dir'],
+        sequence_length=data_cfg['sequence_length'],
+        batch_size=data_cfg['batch_size'],
+        num_workers=data_cfg['num_workers'],
+        drop_last=data_cfg['drop_last'],
+        pin_memory=data_cfg['pin_memory'],
+        use_collate_fn=data_cfg['use_collate_fn'],
+        seed=global_cfg.get('seed', 42)
+    )
+    datamodule.setup()
+    # Model
+    model = SwinUnet3D(
+        in_channel=model_cfg['in_channels'],
+        static_channels=model_cfg['static_channels'],
+        hidden_dim=model_cfg['hidden_dim'],
+        lr_scheduler=model_cfg['lr_scheduler'],
+        layers=model_cfg['layers'],
+        downscaling_factors=model_cfg['downscaling_factors'],
+        heads=model_cfg['heads'],
+        head_dim=model_cfg['head_dim'],
+        window_size=model_cfg['window_size'],
+        dropout=model_cfg['dropout'],
+        relative_pos_embedding=model_cfg['relative_pos_embedding'],
+        optimizer_settings=model_cfg['optimizer_settings'],
+        num_classes=model_cfg['num_classes'],
+        loss_fn=model_cfg['loss_fn'],
+        loss_fn_settings=model_cfg['loss_fn_settings']
+    )
+    # Trainer
+    trainer = pl.Trainer(
+        max_epochs=trainer_cfg['max_epochs'],
+        accelerator=trainer_cfg['accelerator'],
+        devices=trainer_cfg['devices'],
+        precision=trainer_cfg['precision'],
+        logger=logger,
+        strategy=trainer_cfg['strategy'],
+        fast_dev_run=trainer_cfg['fast_dev_run'],
+        accumulate_grad_batches=trainer_cfg['accumulate_grad_batches'],
+        callbacks=callbacks
+    )
+    checkpoint_path = os.path.join(trainer_cfg['predict']['checkpoint_dir'], trainer_cfg['predict']['checkpoint'])
+    trainer.predict(
+            model=model,
+            dataloaders=[datamodule.val_dataloader()],
+            ckpt_path=checkpoint_path
+    )
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--global_config", default="configs/global_config.yaml", help="Path to global config.")
+    parser.add_argument("--trainer_config", default="configs/trainer_config.yaml", help="Path to trainer config.")
+    parser.add_argument("--data_config", default="configs/data_config.yaml", help="Path to data config.")
+    parser.add_argument("--model_config", default="configs/model_config.yaml", help="Path to model config.")
+    args = parser.parse_args()
+    main(args)
+

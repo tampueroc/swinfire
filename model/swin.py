@@ -208,6 +208,26 @@ class SwinUnet3D(pl.LightningModule):
         self.log("val_jaccard_index", self.val_jaccard_index, on_step=False, on_epoch=True)
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
+    def predict_step(self, batch, batch_idx):
+        fire_seq, static_data, wind_inputs, *rest = batch
+        pred = self(fire_seq, static_data, wind_inputs)
+        pred = pred[..., 56:-56, 56:-56]
+        if rest:
+            isochrone_mask = rest[0]
+            # Update metrics using the same metric instances as training/validation
+            self.train_accuracy(pred, isochrone_mask)
+            self.train_precision(pred, isochrone_mask)
+            self.train_recall(pred, isochrone_mask)
+            self.train_f1(pred, isochrone_mask)
+            self.train_jaccard_index(pred, isochrone_mask)
+
+            self.log("predict_accuracy", self.train_accuracy, on_step=True, on_epoch=True)
+            self.log("predict_precision", self.train_precision, on_step=True, on_epoch=True)
+            self.log("predict_recall", self.train_recall, on_step=True, on_epoch=True)
+            self.log("predict_f1", self.train_f1, on_step=True, on_epoch=True)
+            self.log("predict_jaccard_index", self.train_jaccard_index, on_step=True, on_epoch=True)
+        return pred
+
     def configure_optimizers(self):
         optimizer_algorithm = self.optimizer_settings.get('optimizer', 'adam')
         learning_rate = self.optimizer_settings.get('learning_rate', 1e-3)  # Default to 0.001

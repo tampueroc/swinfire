@@ -43,3 +43,7 @@ callbacks:
     mode: max
     dirpath: logs/checkpoints
     save_top_k: 5
+
+predict:
+  checkpoint_dir: logs/checkpoints
+  checkpoint: swin_hidden144_lr3e-4val_f1=0.68_val_precision=0.59.ckpt

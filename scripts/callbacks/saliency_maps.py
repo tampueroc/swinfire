@@ -23,7 +23,7 @@ class SaliencyMapCallback(pl.Callback):
     def on_predict_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
         # Assuming the encoder is accessible as pl_module.encoder (or via pl_module.model.enc5, etc.)
         # and that the static projector and gate are members of the encoder.
-        encoder = pl_module.model.enc5  # adjust this to the proper module
+        encoder = pl_module.enc5  # adjust this to the proper module
 
         # Register forward hooks on the static projector and gate modules.
         # You might need to know the exact attribute names, e.g. encoder.static_projector and encoder.gate.

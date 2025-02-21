@@ -3,70 +3,91 @@ import torch
 import torch.nn.functional as F
 import torchvision.utils as vutils
 
+###############################################
+# GradCAM Helper: Decoupled CAM Logic
+###############################################
+class GradCAM:
+    def __init__(self, target_layer):
+        self.target_layer = target_layer
+        self.activations = None
+        self.gradients = None
+        self.hook_handles = []
+        self._register_hooks()
+
+    def _register_hooks(self):
+        # Register a forward hook to save activations.
+        handle_fwd = self.target_layer.register_forward_hook(self._save_activation)
+        # Register a full backward hook to capture gradients.
+        handle_bwd = self.target_layer.register_full_backward_hook(self._save_gradient)
+        self.hook_handles.extend([handle_fwd, handle_bwd])
+
+    def _save_activation(self, module, input, output):
+        self.activations = output.detach()
+
+    def _save_gradient(self, module, grad_input, grad_output):
+        # grad_output is a tuple; we assume the first element is needed.
+        self.gradients = grad_output[0].detach()
+
+    def compute_cam(self):
+        if self.activations is None or self.gradients is None:
+            raise RuntimeError("GradCAM hooks have not captured activations/gradients.")
+        # Assume activations and gradients shape: [B, C, H, W]
+        # Compute channel-wise weights by averaging gradients spatially.
+        weights = torch.mean(self.gradients, dim=(2, 3))  # shape: [B, C]
+        # Compute the weighted combination of the activations.
+        cam = torch.zeros(self.activations.shape[0], self.activations.shape[2], self.activations.shape[3],
+                          device=self.activations.device)
+        for i in range(self.activations.shape[0]):
+            # Multiply each channel by its corresponding weight and sum.
+            cam[i] = torch.sum(weights[i].unsqueeze(-1).unsqueeze(-1) * self.activations[i], dim=0)
+            # Apply ReLU to consider only positive contributions.
+            cam[i] = F.relu(cam[i])
+        # Normalize each CAM map to [0, 1]
+        cam_min = cam.view(cam.shape[0], -1).min(dim=1, keepdim=True)[0].unsqueeze(-1)
+        cam_max = cam.view(cam.shape[0], -1).max(dim=1, keepdim=True)[0].unsqueeze(-1)
+        cam = (cam - cam_min) / (cam_max - cam_min + 1e-6)
+        return cam
+
+    def remove_hooks(self):
+        for handle in self.hook_handles:
+            handle.remove()
+
+###############################################
+# Updated SaliencyMapCallback using GradCAM
+###############################################
 class SaliencyMapCallback(pl.Callback):
     def __init__(self):
         super().__init__()
-        self.static_proj_activations = None
-        self.gate_maps = None
-
-    def _static_proj_hook(self, module, input, output):
-        # Capture static projector activations
-        self.static_proj_activations = output.detach()
-
-    def _gate_hook(self, module, input, output):
-        # Capture the gating mask from the fusion module.
-        # In ConditionalGate, output = x * gate + static_proj * (1 - gate),
-        # so you might want to capture the gate itself.
-        # One option is to modify the module to return gate as an additional output.
-        # Alternatively, if the gate is computed inside a conv net, you might
-        # insert a hook there.
-        self.gate_maps = output[1].detach()
+        # Remove old attributes related to static projection.
+        # We'll rely on GradCAM to compute our heatmaps.
+        self.gradcam = None
 
     def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
-        # Assuming the encoder is accessible as pl_module.encoder (or via pl_module.model.enc5, etc.)
-        # and that the static projector and gate are members of the encoder.
-        encoder = pl_module.enc5  # adjust this to the proper module
-
-        # Register forward hooks on the static projector and gate modules.
-        # You might need to know the exact attribute names, e.g. encoder.static_projector and encoder.gate.
-        self.gate_hook_handle = encoder.gate.register_forward_hook(self._gate_hook)
+        # Choose a target layer for GradCAM.
+        # For example, we might use the first convolution layer in the final expansion block.
+        # Adjust this as needed (e.g., pl_module.final.net[0] if final is a Sequential).
+        target_layer = pl_module.final.net[0]
+        self.gradcam = GradCAM(target_layer)
 
     def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
-        self.gate_hook_handle.remove()
-        logger = pl_module.logger.experiment
+        # Remove hooks after the batch is finished.
+        if self.gradcam is not None:
+            logger = pl_module.logger.experiment
 
-        if self.gate_maps is not None:
-            # gate_maps: [B, 1152, 16, 16, 4]; collapse the last dimension.
-            gate_map = self.gate_maps[..., -1]  # Now [B, 1152, 16, 16]
-            B, C_gate, H_ds, W_ds = gate_map.shape  # C_gate = 1152, H_ds=W_ds=16
+            # Compute the CAM heatmaps.
+            # Make sure that backward() has been called in your test_step so that gradients are available.
+            cam_maps = self.gradcam.compute_cam()  # shape: [B, H, W]
 
-            # Retrieve the StaticProjector conv weights from enc5.static_projector.proj[0]
-            # This conv maps the original 8 static channels to 1152 channels.
-            static_conv_weight = pl_module.enc5.static_projector.proj[0].weight
-            # Average over the kernel dimensions to get a mapping matrix of shape [1152, 8].
-            mapping_matrix = static_conv_weight.mean(dim=[2, 3])  # [1152, 8]
-            mapping_matrix = mapping_matrix.to(gate_map.dtype)
+            # For demonstration, log the CAM for the first sample.
+            heatmap = cam_maps[0].cpu().numpy()
+            # Optionally, resize heatmap to match the original input dimensions if needed.
+            # Here we simply log it to TensorBoard.
+            logger.add_image(
+                "GradCAM/Heatmap",
+                torch.tensor(heatmap).unsqueeze(0),  # shape [1, H, W] for TensorBoard
+                global_step=trainer.global_step,
+                dataformats='CHW'
+            )
+            self.gradcam.remove_hooks()
+            self.gradcam = None
 
-            # Reshape gate_map: from [B, 1152, 16, 16] to [B, 1152, 16*16] and transpose:
-            gate_reshaped = gate_map.view(B, C_gate, -1).transpose(1, 2)  # [B, 256, 1152]
-            # Multiply to project each 1152-dim vector into 8 channels: [B, 256, 8]
-            static_contrib = torch.matmul(gate_reshaped, mapping_matrix)  # [B, 256, 8]
-            # Reshape to [B, 8, 16, 16]
-            static_contrib = static_contrib.transpose(1, 2).view(B, 8, H_ds, W_ds)
-
-            # Upsample to original static resolution (512x512)
-            upsampled_contrib = F.interpolate(static_contrib, size=(512, 512), mode='bilinear', align_corners=False)
-            # Now upsampled_contrib is [B, 8, 512, 512]
-
-            # Log heat maps per original static channel for the first sample in the batch
-            for channel in range(8):
-                heatmap = upsampled_contrib[0, channel, :, :]  # [512, 512]
-                # Normalize heatmap for visualization purposes (optional)
-                heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-6)
-                logger.add_image(
-                    f"ConditionalGate/StaticChannel_{channel}_heatmap",
-                    heatmap.unsqueeze(0),  # add channel dimension for TensorBoard (1, H, W)
-                    global_step=trainer.global_step
-                )
-
-        self.gate_maps = None

@@ -215,6 +215,7 @@ class SwinUnet3D(pl.LightningModule):
             pred = self(fire_seq, static_data, wind_inputs)
             pred = pred[..., 56:-56, 56:-56]
             loss = self.loss_fn(pred, isochrone_mask)
+            loss.backward()
         self.log("test_loss", loss)
 
         # Update metrics (reusing validation metrics for testing)

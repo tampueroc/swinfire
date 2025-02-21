@@ -31,17 +31,26 @@ class GradCAM:
     def compute_cam(self):
         if self.activations is None or self.gradients is None:
             raise RuntimeError("GradCAM hooks have not captured activations/gradients.")
-        # Assume activations and gradients shape: [B, C, H, W]
-        # Compute channel-wise weights by averaging gradients spatially.
-        weights = torch.mean(self.gradients, dim=(2, 3))  # shape: [B, C]
-        # Compute the weighted combination of the activations.
+        # Compute channel-wise weights by averaging gradients over spatial dimensions (H, W)
+        # self.gradients: [B, C, H, W, D] => weights: [B, C, D]
+        weights = torch.mean(self.gradients, dim=(2, 3))
+
+        # Initialize a container for CAM maps with shape [B, H, W]
         cam = torch.zeros(self.activations.shape[0], self.activations.shape[2], self.activations.shape[3],
                           device=self.activations.device)
+
+        # Loop over batch
         for i in range(self.activations.shape[0]):
-            # Multiply each channel by its corresponding weight and sum.
-            cam[i] = torch.sum(weights[i].unsqueeze(-1).unsqueeze(-1) * self.activations[i], dim=0)
-            # Apply ReLU to consider only positive contributions.
+            # weights[i] has shape [C, D]. Unsqueeze to shape [C, 1, 1, D] to match activations[i] shape: [C, H, W, D]
+            w = weights[i].unsqueeze(1).unsqueeze(2)
+            # Multiply elementwise and sum over channels:
+            # cam_sample has shape [H, W, D]
+            cam_sample = torch.sum(w * self.activations[i], dim=0)
+            # Average over depth dimension to get a 2D map: shape [H, W]
+            cam[i] = torch.mean(cam_sample, dim=-1)
+            # Apply ReLU to keep only positive contributions
             cam[i] = F.relu(cam[i])
+
         # Normalize each CAM map to [0, 1]
         cam_min = cam.view(cam.shape[0], -1).min(dim=1, keepdim=True)[0].unsqueeze(-1)
         cam_max = cam.view(cam.shape[0], -1).max(dim=1, keepdim=True)[0].unsqueeze(-1)

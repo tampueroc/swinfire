@@ -5,6 +5,7 @@ precision: 16-mixed
 strategy: auto
 fast_dev_run: 1
 accumulate_grad_batches: 4
+inference_mode: false
 
 logger:
   enabled: true

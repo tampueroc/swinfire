@@ -211,9 +211,10 @@ class SwinUnet3D(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         fire_seq, static_data, wind_inputs, *isochrone_mask = batch
         isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq, static_data, wind_inputs)
-        pred = pred[..., 56:-56, 56:-56]
-        loss = self.loss_fn(pred, isochrone_mask)
+        with torch.enable_grad():
+            pred = self(fire_seq, static_data, wind_inputs)
+            pred = pred[..., 56:-56, 56:-56]
+            loss = self.loss_fn(pred, isochrone_mask)
         self.log("test_loss", loss)
 
         # Update metrics (reusing validation metrics for testing)

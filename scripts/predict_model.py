@@ -110,6 +110,7 @@ def main(args):
     )
     # Trainer
     trainer = pl.Trainer(
+        inference_mode=trainer_cfg['inference_mode'],
         max_epochs=trainer_cfg['max_epochs'],
         accelerator=trainer_cfg['accelerator'],
         devices=trainer_cfg['devices'],

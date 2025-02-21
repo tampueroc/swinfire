@@ -6,7 +6,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from utils import Logger
 from data import FireDataModule
-from callbacks import SaliencyMapCallback
+from callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback, FinalMetricsCallback, SaliencyMapCallback
 from model.swin import SwinUnet3D
 
 def load_yaml_config(path):
@@ -30,14 +30,54 @@ def main(args):
     else:
         logger = None
 
-    # Callbacks
+        # Callbacks
     callbacks_cfg = trainer_cfg['callbacks']
     callbacks = []
 
+    early_stopper_cfg = callbacks_cfg['early_stopper']
+    if early_stopper_cfg.get('enabled', False) is True:
+        early_stopping_callback = EarlyStoppingHandler.get_early_stopping_callback(
+            monitor=early_stopper_cfg['monitor'],
+            patience=early_stopper_cfg['patience'],
+            mode=early_stopper_cfg['mode'],
+            min_delta=early_stopper_cfg['min_delta']
+        )
+        callbacks.append(early_stopping_callback)
+    image_logger_cfg= callbacks_cfg['image_logger']
+    if image_logger_cfg.get('enabled', False) is True:
+        image_prediction_logger_callback = ImageLoggerHandler()
+        callbacks.append(image_prediction_logger_callback)
+    logging_callback_cfg = callbacks_cfg['logging_callback']
+    if logging_callback_cfg.get('enabled', False) is True:
+        logging_callback = LoggingCallback()
+        callbacks.append(logging_callback)
+    final_metrics_callback_cfg = callbacks_cfg['final_metrics_callback']
+    if final_metrics_callback_cfg.get('enabled', False) is True:
+        final_metrics_callback = FinalMetricsCallback(
+                on_training_data=final_metrics_callback_cfg.get('on_training_data', False),
+                on_validation_data=final_metrics_callback_cfg.get('on_validation_data', True)
+        )
+        callbacks.append(final_metrics_callback)
+    learning_rate_monitor_callback_cfg = callbacks_cfg['learning_rate_monitor']
+    if learning_rate_monitor_callback_cfg.get('enabled', False) is not False:
+        learning_rate_monitor = LearningRateMonitor()
+        callbacks.append(learning_rate_monitor)
     saliency_maps_callback_cfg = callbacks_cfg['saliency_maps_callback']
     if saliency_maps_callback_cfg.get('enabled', False) is True:
         saliency_maps_callback = SaliencyMapCallback()
         callbacks.append(saliency_maps_callback)
+    checkpoint_callback_cfg = callbacks_cfg['checkpoint_callback']
+    if checkpoint_callback_cfg.get('enabled', False) is True:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=checkpoint_callback_cfg.get('dirpath', 'logs/checkpoints'),
+            filename=logger_cfg["name"] + '{val_f1:.2f}_{val_precision:.2f}',
+            mode=checkpoint_callback_cfg['mode'],
+            monitor=checkpoint_callback_cfg['monitor'],
+            auto_insert_metric_name=True,
+            save_top_k=checkpoint_callback_cfg['save_top_k']
+        )
+        callbacks.append(checkpoint_callback)
+
     # Datamodule
     datamodule = FireDataModule(
         data_dir=data_cfg['data_dir'],
@@ -81,11 +121,7 @@ def main(args):
         callbacks=callbacks
     )
     checkpoint_path = os.path.join(trainer_cfg['predict']['checkpoint_dir'], trainer_cfg['predict']['checkpoint'])
-    trainer.predict(
-            model=model,
-            dataloaders=[datamodule.val_dataloader()],
-            ckpt_path=checkpoint_path
-    )
+    trainer.test(model=model, dataloaders=datamodule.val_dataloader(), ckpt_path=checkpoint_path)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--global_config", default="configs/global_config.yaml", help="Path to global config.")

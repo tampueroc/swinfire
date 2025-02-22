@@ -42,12 +42,13 @@ class FinalMetricsCallback(pl.Callback):
         model.eval()
         with torch.no_grad():
             for batch in dataloader:
-                fire_seq, static_data, wind_inputs, *isochrone_mask = batch
+                fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens= batch
                 fire_seq = fire_seq.to(model.device)
                 static_data = static_data.to(model.device)
                 wind_inputs = wind_inputs.to(model.device)
-                isochrone_mask = isochrone_mask[0].to(model.device)
-                pred = model(fire_seq, static_data, wind_inputs)
+                valid_tokens = valid_tokens.to(model.device)
+                isochrone_mask = isochrone_mask.to(model.device)
+                pred = model(fire_seq, static_data, wind_inputs, valid_tokens)
                 pred = pred[..., 56:-56, 56:-56]  # Cropping like in validation_step
 
                 accuracy.update(pred, isochrone_mask.int())

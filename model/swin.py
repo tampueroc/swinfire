@@ -28,7 +28,11 @@ class SwinUnet3D(pl.LightningModule):
         example_shape_fire = (4, in_channel, 512, 512, 4)  # Batch size 4, example spatial size, temporal depth
         example_shape_static = (4, static_channels, 512, 512)
         example_shape_wind = (4, 2, 4)
-        self.example_input_array = (torch.randn(example_shape_fire, dtype=torch.float32), torch.rand(example_shape_static, dtype=torch.float32), torch.rand(example_shape_wind, dtype=torch.float32))
+        valid_tokens = torch.ones(
+            (4, 4),
+            dtype=torch.float32
+        )
+        self.example_input_array = (torch.randn(example_shape_fire, dtype=torch.float32), torch.rand(example_shape_static, dtype=torch.float32), torch.rand(example_shape_wind, dtype=torch.float32), valid_tokens)
 
         self.optimizer_settings = optimizer_settings
         self.lr_scheduler = lr_scheduler

@@ -106,8 +106,8 @@ class WindowAttention3D(nn.Module):
                 w_y=self.window_size[1],
                 w_z=self.window_size[2]
             )
-            # Masking: Set attention scores to -inf for padded positions
-            dots = dots.masked_fill(~mask_windows.unsqueeze(2).bool(), -torch.inf)
+            mask_windows = mask_windows.unsqueeze(1).unsqueeze(3)  # Add head and patch dimensions
+            dots = dots.masked_fill(~mask_windows.bool(), -torch.inf)
 
         # attn = dots.softmax(dim=-1)
         attn = self.softmax(dots)

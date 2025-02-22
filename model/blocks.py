@@ -30,9 +30,9 @@ class SwinBlock3D(nn.Module):  # 不会改变输入空间分辨率
             )
         self.mlp_block = Residual3D(PreNorm3D(dim, FeedForward3D(dim=dim, hidden_dim=mlp_dim, dropout=dropout)))
 
-    def forward(self, x, wind_context=False):
+    def forward(self, x, wind_context=False, attn_mask=None):
         # Standard Swin Transformer flow
-        x = self.attention_block(x)
+        x = self.attention_block(x, attn_mask=attn_mask)
 
         # Add wind context cross-attention
         B, H, W, D, C = x.shape
@@ -103,8 +103,13 @@ class WindContextEncoder(nn.Module):
             num_layers=2
         )
 
-    def forward(self, wind_input):
+    def forward(self, wind_input, valid_tokens):
         # wind_input: [B, T, 3]
         x = wind_input.permute(0, 2, 1)  # Swap time and channel dims
         x = self.proj(x)  # [B, T, hidden_dim]
-        return self.transformer(x)  # [B, T, hidden_dim]
+        src_key_padding_mask = (valid_tokens == 0)
+        x = self.transformer(
+            x,
+            src_key_padding_mask=src_key_padding_mask  # Mask padded timesteps
+        )
+        return x  # [B, T, hidden_dim]

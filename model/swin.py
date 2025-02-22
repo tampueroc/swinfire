@@ -117,7 +117,7 @@ class SwinUnet3D(pl.LightningModule):
         # 参数初始化
         self.init_weight()
 
-    def forward(self, img, static_data, wind_inputs):
+    def forward(self, img, static_data, wind_inputs, valid_tokens):
         window_size = self.window_size
         assert type(window_size) is int or len(window_size) == 3, 'window_size must be 1 or 3 dimension'
         if type(window_size) is int:
@@ -128,13 +128,13 @@ class SwinUnet3D(pl.LightningModule):
         assert x_s % (x_ws * 32) == 0, f'x-axis size ({x_s}) must be divisible by x_window_size * 32 ({x_ws * 32}).'
         assert y_s % (y_ws * 32) == 0, f'y-axis size ({y_s}) must be divisible by y_window_size * 32 ({y_ws * 32}).'
 
-        wind_context = self.wind_encoder(wind_inputs)
+        wind_context = self.wind_encoder(wind_inputs, valid_tokens)
 
 
-        down12_1 = self.enc12(img, static_data, wind_context)  # (B,C, X//4, Y//4, Z//4)
-        down3 = self.enc3(down12_1, static_data, wind_context)  # (B, 2C,X//8, Y//8, Z//8)
-        down4 = self.enc4(down3, static_data, wind_context)  # (B, 4C,X//16, Y//16, Z//16)
-        features = self.enc5(down4, static_data, wind_context)  # (B, 8C,X//32, Y//32, Z//32)
+        down12_1 = self.enc12(img, static_data, wind_context, valid_tokens)  # (B,C, X//4, Y//4, Z//4)
+        down3 = self.enc3(down12_1, static_data, wind_context, valid_tokens)  # (B, 2C,X//8, Y//8, Z//8)
+        down4 = self.enc4(down3, static_data, wind_context, valid_tokens)  # (B, 4C,X//16, Y//16, Z//16)
+        features = self.enc5(down4, static_data, wind_context, valid_tokens)  # (B, 8C,X//32, Y//32, Z//32)
 
         up4 = self.dec4(features)  # (B, 8C, X//16, Y//16, Z//16 )
         # up1和 down3融合
@@ -165,9 +165,8 @@ class SwinUnet3D(pl.LightningModule):
                 nn.init.constant_(m.bias, 0.0)
 
     def training_step(self, batch, batch_idx):
-        fire_seq, static_data, wind_inputs, *isochrone_mask = batch
-        isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq, static_data, wind_inputs)
+        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("train_loss", loss)
@@ -187,9 +186,8 @@ class SwinUnet3D(pl.LightningModule):
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
     def validation_step(self, batch, batch_idx):
-        fire_seq, static_data, wind_inputs, *isochrone_mask = batch
-        isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq, static_data, wind_inputs)
+        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("val_loss", loss)

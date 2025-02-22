@@ -94,7 +94,7 @@ class SaliencyMapCallback(pl.Callback):
             logger.add_image(
                 "GradCAM/Heatmap",
                 torch.tensor(heatmap).unsqueeze(0),  # shape [1, H, W] for TensorBoard
-                global_step=trainer.global_step,
+                global_step=batch_idx,
                 dataformats='CHW'
             )
             self.gradcam.remove_hooks()

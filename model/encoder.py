@@ -40,14 +40,17 @@ class Encoder(nn.Module):
             static_dim=hidden_dimension
         )
 
-    def forward(self, x, static_data=None, wind_context=None):
+    def forward(self, x, static_data=None, wind_context=None, attn_mask=None):
         x = self.patch_partition(x)
         x2 = self.conv_block(x)  # Short dependencies
 
+        B, C, H, W, T = x.shape
+        attn_mask = attn_mask.view(B, 1, 1, T).expand(-1, H, W, -1)  # [B, H, W, T]
+
         x = self.re1(x)
         for regular_block, shifted_block in self.swin_layers:  # Long dependencies
-            x = regular_block(x, wind_context)
-            x = shifted_block(x, wind_context)
+            x = regular_block(x, wind_context, attn_mask=attn_mask)
+            x = shifted_block(x, wind_context, attn_mask=attn_mask)
         x = self.re2(x)
 
         if static_data is not None:

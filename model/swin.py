@@ -12,7 +12,7 @@ from .decoder import Decoder, Converge
 from .patch_layers import FinalExpand3D
 from .blocks import WindContextEncoder
 from .losses import WeightedFocalLoss, AsymUnifiedFocalLoss
-from timm.layers import trunc_normal_
+from timm.layers.weight_init import trunc_normal_
 
 class SwinUnet3D(pl.LightningModule):
     def __init__(self, *, hidden_dim, layers, heads, in_channel=1, num_classes=2, head_dim=32,
@@ -28,7 +28,19 @@ class SwinUnet3D(pl.LightningModule):
         example_shape_fire = (4, in_channel, 512, 512, 4)  # Batch size 4, example spatial size, temporal depth
         example_shape_static = (4, static_channels, 512, 512)
         example_shape_wind = (4, 2, 4)
-        self.example_input_array = (torch.randn(example_shape_fire, dtype=torch.float32), torch.rand(example_shape_static, dtype=torch.float32), torch.rand(example_shape_wind, dtype=torch.float32))
+        valid_tokens = torch.tensor([
+            [1, 1, 1, 1],
+            [1, 1, 1, 0],  # second sample: last timestep masked
+            [1, 1, 0, 0],  # third sample: last two timesteps masked
+            [1, 1, 1, 1]
+        ], dtype=torch.float32)
+
+        self.example_input_array = (
+            torch.randn(example_shape_fire, dtype=torch.float32),
+            torch.rand(example_shape_static, dtype=torch.float32),
+            torch.rand(example_shape_wind, dtype=torch.float32),
+            valid_tokens
+        )
 
         self.optimizer_settings = optimizer_settings
         self.lr_scheduler = lr_scheduler
@@ -117,7 +129,7 @@ class SwinUnet3D(pl.LightningModule):
         # 参数初始化
         self.init_weight()
 
-    def forward(self, img, static_data, wind_inputs):
+    def forward(self, img, static_data, wind_inputs, valid_tokens = None):
         window_size = self.window_size
         assert type(window_size) is int or len(window_size) == 3, 'window_size must be 1 or 3 dimension'
         if type(window_size) is int:
@@ -128,7 +140,7 @@ class SwinUnet3D(pl.LightningModule):
         assert x_s % (x_ws * 32) == 0, f'x-axis size ({x_s}) must be divisible by x_window_size * 32 ({x_ws * 32}).'
         assert y_s % (y_ws * 32) == 0, f'y-axis size ({y_s}) must be divisible by y_window_size * 32 ({y_ws * 32}).'
 
-        wind_context = self.wind_encoder(wind_inputs)
+        wind_context = self.wind_encoder(wind_inputs, valid_tokens)
 
 
         down12_1 = self.enc12(img, static_data, wind_context)  # (B,C, X//4, Y//4, Z//4)
@@ -165,9 +177,8 @@ class SwinUnet3D(pl.LightningModule):
                 nn.init.constant_(m.bias, 0.0)
 
     def training_step(self, batch, batch_idx):
-        fire_seq, static_data, wind_inputs, *isochrone_mask = batch
-        isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq, static_data, wind_inputs)
+        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("train_loss", loss)
@@ -187,9 +198,8 @@ class SwinUnet3D(pl.LightningModule):
         return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
     def validation_step(self, batch, batch_idx):
-        fire_seq, static_data, wind_inputs, *isochrone_mask = batch
-        isochrone_mask = isochrone_mask[0]
-        pred = self(fire_seq, static_data, wind_inputs)
+        fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
+        pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
         pred = pred[..., 56:-56, 56:-56]
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("val_loss", loss)

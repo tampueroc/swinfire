@@ -103,8 +103,9 @@ class WindContextEncoder(nn.Module):
             num_layers=2
         )
 
-    def forward(self, wind_input):
-        # wind_input: [B, T, 3]
+    def forward(self, wind_input, valid_tokens = None):
+        # wind_input: [B, T, 2]
         x = wind_input.permute(0, 2, 1)  # Swap time and channel dims
         x = self.proj(x)  # [B, T, hidden_dim]
-        return self.transformer(x)  # [B, T, hidden_dim]
+        src_key_padding_mask = (valid_tokens == 0) if valid_tokens is not None else None
+        return self.transformer(x, src_key_padding_mask=src_key_padding_mask)  # [B, T, hidden_dim]

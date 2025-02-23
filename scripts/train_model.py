@@ -1,6 +1,7 @@
 import yaml
 import argparse
 import pytorch_lightning as pl
+from lightning.pytorch.profilers import AdvancedProfiler
 from pytorch_lightning.callbacks import LearningRateMonitor
 
 from utils import Logger
@@ -96,6 +97,13 @@ def main(args):
     model.hparams.update(datamodule.hparams)
     model.save_hyperparameters()
 
+    # Choose profiler: if trainer config has 'advanced', instantiate AdvancedProfiler.
+    profiler_config = trainer_cfg.get('profiler', 'simple')
+    if profiler_config == "advanced":
+        profiler = AdvancedProfiler(dirpath=".", filename="perf_logs")
+    else:
+        profiler = profiler_config  # e.g., 'simple'
+
     # Trainer
     trainer = pl.Trainer(
         max_epochs=trainer_cfg['max_epochs'],
@@ -107,7 +115,7 @@ def main(args):
         fast_dev_run=trainer_cfg['fast_dev_run'],
         accumulate_grad_batches=trainer_cfg['accumulate_grad_batches'],
         callbacks=callbacks,
-        profiler=trainer_cfg['profiler']
+        profiler=profiler
     )
     trainer.fit(
             model=model,

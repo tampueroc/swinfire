@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 from typing import Union, List
 from einops import rearrange
 import numpy as np
@@ -55,7 +56,7 @@ class WindowAttention3D(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.to_out = nn.Linear(inner_dim, dim)
 
-    def forward(self, x):
+    def forward(self, x, valid_tokens = None):
         if self.shifted:
             x = self.cyclic_shift(x)
 
@@ -94,6 +95,15 @@ class WindowAttention3D(nn.Module):
             dots[:, :, :, :, -1] += self.z_mask
 
             dots = rearrange(dots, 'b h n_y n_z n_x i j -> b h (n_x n_y n_z) i j')
+
+        if valid_tokens is not None:
+            J = self.window_size[0] * self.window_size[1] * self.window_size[2]
+            j_indices = torch.arange(J, device=x.device) % self.window_size[2]
+            valid_mask = valid_tokens[:, j_indices]  # Shape [B, J]
+            logits_mask = torch.zeros_like(valid_mask, dtype=dots.dtype, device=dots.device)
+            logits_mask = logits_mask.masked_fill(~valid_mask.bool(), -1e10)
+            logits_mask = logits_mask.view(b, 1, 1, 1, -1)  # Shape [B, 1, 1, 1, J]
+            dots += logits_mask
 
         # attn = dots.softmax(dim=-1)
         attn = self.softmax(dots)

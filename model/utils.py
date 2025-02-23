@@ -66,7 +66,7 @@ def create_mask3D(window_size: Union[int, List[int]], displacement: Union[int, L
         displacement = np.array([displacement, displacement, displacement])
 
     assert len(window_size) == len(displacement)
-    for i in range(len(window_size)):
+    for i in range(len(window_size)-1):
         assert 0 < displacement[i] < window_size[i], \
             '在第{i}轴的偏移量不正确，维度包括X(i=0)，Y(i=1)和Z(i=2)'
 

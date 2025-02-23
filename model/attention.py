@@ -28,14 +28,15 @@ class WindowAttention3D(nn.Module):
 
         if self.shifted:
             displacement = window_size // 2
+            displacement[2] = 0  # No shift along Z
             self.cyclic_shift = CyclicShift3D(-displacement)
             self.cyclic_back_shift = CyclicShift3D(displacement)
             self.x_mask = nn.Parameter(create_mask3D(window_size=window_size, displacement=displacement,
                                                      x_shift=True, y_shift=False, z_shift=False), requires_grad=False)
             self.y_mask = nn.Parameter(create_mask3D(window_size=window_size, displacement=displacement,
                                                      x_shift=False, y_shift=True, z_shift=False), requires_grad=False)
-            self.z_mask = nn.Parameter(create_mask3D(window_size=window_size, displacement=displacement,
-                                                     x_shift=False, y_shift=False, z_shift=True), requires_grad=False)
+            # self.z_mask = nn.Parameter(create_mask3D(window_size=window_size, displacement=displacement,
+                                                     # x_shift=False, y_shift=False, z_shift=True), requires_grad=False)
 
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)  # QKV三个
 
@@ -91,8 +92,8 @@ class WindowAttention3D(nn.Module):
             dots = rearrange(dots, 'b h n_y n_z n_x i j -> b h n_x n_z n_y i j')
             dots[:, :, :, :, -1] += self.y_mask
 
-            dots = rearrange(dots, 'b h n_x n_z n_y i j -> b h n_x n_y n_z i j')
-            dots[:, :, :, :, -1] += self.z_mask
+            # dots = rearrange(dots, 'b h n_x n_z n_y i j -> b h n_x n_y n_z i j')
+            # dots[:, :, :, :, -1] += self.z_mask
 
             dots = rearrange(dots, 'b h n_y n_z n_x i j -> b h (n_x n_y n_z) i j')
 

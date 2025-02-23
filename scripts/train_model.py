@@ -106,7 +106,8 @@ def main(args):
         strategy=trainer_cfg['strategy'],
         fast_dev_run=trainer_cfg['fast_dev_run'],
         accumulate_grad_batches=trainer_cfg['accumulate_grad_batches'],
-        callbacks=callbacks
+        callbacks=callbacks,
+        profiler=trainer_cfg['profiler']
     )
     trainer.fit(
             model=model,

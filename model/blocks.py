@@ -80,6 +80,7 @@ class ConditionalGate(nn.Module):
             nn.Conv3d(feat_dim // 2, feat_dim, kernel_size=3, padding=1),
             nn.Sigmoid()  # Outputs gating mask ∈ [0,1]
         )
+        self.gate_values = None
 
     def forward(self, x, static_proj):
         # x: [B, C, H, W] (encoder features)
@@ -87,6 +88,7 @@ class ConditionalGate(nn.Module):
         static_proj = static_proj.unsqueeze(-1).expand(-1, -1, -1, -1, x.size(-1))
         fused = torch.cat([x, static_proj], dim=1)
         gate = self.fusion(fused)
+        self.gate_values = gate.detach()
         return x * gate + static_proj * (1 - gate)  # Blended features
 
 class WindContextEncoder(nn.Module):

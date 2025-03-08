@@ -1,5 +1,4 @@
 import pytorch_lightning as pl
-from torch.utils.tensorboard import SummaryWriter
 
 class LoggingCallback(pl.Callback):
     def __init__(self):

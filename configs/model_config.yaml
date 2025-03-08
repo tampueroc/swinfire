@@ -18,7 +18,7 @@ lr_scheduler:
   scheduler: reduce_lr_on_plateau
   monitor: val_loss
   patience: 3
-  threshold: 0.001
+  threshold: 0.01
   cooldown: 1
   factor: 0.5
 loss_fn_settings:

@@ -37,7 +37,8 @@ class Encoder(nn.Module):
         )
         self.gate = ConditionalGate(
             feat_dim=hidden_dimension,
-            static_dim=hidden_dimension
+            static_dim=hidden_dimension,
+            dropout=dropout
         )
 
     def forward(self, x, static_data=None, wind_context=None):

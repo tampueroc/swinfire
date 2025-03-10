@@ -72,7 +72,7 @@ class ConvBlock(nn.Module):
 
 class ConditionalGate(nn.Module):
     """Dynamically fuses encoder features with static data."""
-    def __init__(self, feat_dim, static_dim, dropout=0):
+    def __init__(self, feat_dim, static_dim, dropout=0.0):
         super().__init__()
         self.fusion = nn.Sequential(
             nn.Conv3d(feat_dim + static_dim, feat_dim // 2, kernel_size=3, padding=1),

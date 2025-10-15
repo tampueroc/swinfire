@@ -394,12 +394,17 @@ class FactorizedFireTransformer(pl.LightningModule):
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("train_loss", loss)
         
-        # Update metrics
-        self.train_accuracy(pred, isochrone_mask)
-        self.train_precision(pred, isochrone_mask)
-        self.train_recall(pred, isochrone_mask)
-        self.train_f1(pred, isochrone_mask)
-        self.train_jaccard_index(pred, isochrone_mask)
+        # For metrics: extract positive class and apply sigmoid
+        # pred shape: [B, 2, H, W] -> take class 1 (fire) -> [B, H, W]
+        pred_probs = torch.sigmoid(pred[:, 1, :, :]) if pred.shape[1] == 2 else torch.sigmoid(pred.squeeze(1))
+        target_binary = isochrone_mask[:, 1, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask.squeeze(1)
+        
+        # Update metrics with probabilities
+        self.train_accuracy(pred_probs, target_binary.int())
+        self.train_precision(pred_probs, target_binary.int())
+        self.train_recall(pred_probs, target_binary.int())
+        self.train_f1(pred_probs, target_binary.int())
+        self.train_jaccard_index(pred_probs, target_binary.int())
         
         self.log("train_accuracy", self.train_accuracy, on_step=True, on_epoch=False)
         self.log("train_precision", self.train_precision, on_step=True, on_epoch=False)
@@ -419,12 +424,16 @@ class FactorizedFireTransformer(pl.LightningModule):
         loss = self.loss_fn(pred, isochrone_mask)
         self.log("val_loss", loss)
         
-        # Update metrics
-        self.val_accuracy(pred, isochrone_mask)
-        self.val_precision(pred, isochrone_mask)
-        self.val_recall(pred, isochrone_mask)
-        self.val_f1(pred, isochrone_mask)
-        self.val_jaccard_index(pred, isochrone_mask)
+        # For metrics: extract positive class and apply sigmoid
+        pred_probs = torch.sigmoid(pred[:, 1, :, :]) if pred.shape[1] == 2 else torch.sigmoid(pred.squeeze(1))
+        target_binary = isochrone_mask[:, 1, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask.squeeze(1)
+        
+        # Update metrics with probabilities
+        self.val_accuracy(pred_probs, target_binary.int())
+        self.val_precision(pred_probs, target_binary.int())
+        self.val_recall(pred_probs, target_binary.int())
+        self.val_f1(pred_probs, target_binary.int())
+        self.val_jaccard_index(pred_probs, target_binary.int())
         
         self.log("val_accuracy", self.val_accuracy, on_step=False, on_epoch=True)
         self.log("val_precision", self.val_precision, on_step=False, on_epoch=True)

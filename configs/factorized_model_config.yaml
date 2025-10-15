@@ -6,7 +6,7 @@ img_size: 512                  # Input image size
 patch_size: 32                 # Patch size for Vision Transformer (32 = 16x16 patches)
 in_channels: 1                 # Input channels (fire state)
 static_channels: 8             # Static data channels (topography, fuel, etc.)
-num_classes: 1                 # Number of output classes (binary: fire/no-fire)
+num_classes: 2                 # Number of output classes (binary: fire/no-fire) - FIXED!
 
 # Transformer settings
 embed_dim: 256                 # Embedding dimension (smaller than Swin for efficiency)
@@ -18,7 +18,7 @@ dropout: 0.1                   # Dropout rate
 # Training settings
 optimizer_settings:
   optimizer: adamw             # AdamW optimizer (better for transformers)
-  learning_rate: 0.0001        # Learning rate (lower for transformers)
+  learning_rate: 0.0003        # Learning rate - INCREASED for better convergence
   weight_decay: 0.01           # Weight decay for regularization
 
 # Learning rate scheduler
@@ -34,5 +34,5 @@ lr_scheduler:
 loss_fn: unified_focal_loss    # or 'bce', 'focal_loss'
 loss_fn_settings:
   weight: 0.5
-  delta: 0.6
-  gamma: 0.5
+  delta: 0.7  # Increased focus on hard examples
+  gamma: 1.0  # Increased from 0.5 for better class balance

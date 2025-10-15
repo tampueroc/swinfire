@@ -3,15 +3,17 @@ import argparse
 import pytorch_lightning as pl
 from lightning.pytorch.profilers import AdvancedProfiler
 from pytorch_lightning.callbacks import LearningRateMonitor
-
 import sys
-sys.path.append('..')
+import os
 
-from utils import Logger
-from utils.wandb_logger import get_wandb_logger
+# Add repository root to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from scripts.utils import Logger
+from scripts.utils.wandb_logger import get_wandb_logger
 from data import FireDataModule
-from callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback, FinalMetricsCallback
-from callbacks.wandb_explainability_callback import WandbExplainabilityCallback
+from scripts.callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback, FinalMetricsCallback
+from scripts.callbacks.wandb_explainability_callback import WandbExplainabilityCallback
 from model.factorized_transformer import FactorizedFireTransformer
 
 

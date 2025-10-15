@@ -565,21 +565,25 @@ class FactorizedFireTransformer(pl.LightningModule):
         # Store original training mode
         was_training = self.training
         
-        # Enable gradient tracking
-        fire_seq = fire_seq.detach().requires_grad_(True)
-        static_data = static_data.detach().requires_grad_(True)
-        wind_inputs = wind_inputs.detach().requires_grad_(True)
+        # Clone inputs and enable gradient tracking
+        fire_seq = fire_seq.clone().detach().requires_grad_(True)
+        static_data = static_data.clone().detach().requires_grad_(True)
+        wind_inputs = wind_inputs.clone().detach().requires_grad_(True)
+        if valid_tokens is not None:
+            valid_tokens = valid_tokens.clone().detach()
         
         # Set to train mode for gradient computation
         self.train()
         
         try:
-            # Forward pass with attention hooks
-            pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
-            
-            # Compute gradients
-            pred_sum = pred.sum()
-            pred_sum.backward()
+            # Enable gradient computation explicitly
+            with torch.enable_grad():
+                # Forward pass with attention hooks
+                pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
+                
+                # Compute gradients
+                pred_sum = pred.sum()
+                pred_sum.backward()
             
             result = {
                 'pred': pred.detach(),
@@ -589,6 +593,19 @@ class FactorizedFireTransformer(pl.LightningModule):
                     'fire': fire_seq.grad.detach() if fire_seq.grad is not None else None,
                     'static': static_data.grad.detach() if static_data.grad is not None else None,
                     'wind': wind_inputs.grad.detach() if wind_inputs.grad is not None else None,
+                }
+            }
+        except Exception as e:
+            print(f"Warning: Gradient computation failed: {e}")
+            # Return without gradients
+            result = {
+                'pred': pred.detach() if 'pred' in locals() else None,
+                'spatial_attention': self.explain_state.get('spatial_attention', []),
+                'temporal_attention': self.explain_state.get('temporal_attention', []),
+                'grads': {
+                    'fire': None,
+                    'static': None,
+                    'wind': None,
                 }
             }
         finally:

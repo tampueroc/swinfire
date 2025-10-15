@@ -4,6 +4,9 @@ W&B Explainability Callback for FactorizedFireTransformer.
 Automatically logs explainability artifacts during training.
 """
 
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for headless servers
+
 import pytorch_lightning as pl
 import torch
 import wandb

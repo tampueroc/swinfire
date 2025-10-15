@@ -46,7 +46,7 @@ callbacks:
   
   # W&B Explainability Callback (NEW!)
   wandb_explainability:
-    enabled: true  # Set to true to log explainability visualizations
+    enabled: false  # DISABLED - enable after training for analysis
     log_every_n_epochs: 5  # Log explanations every N epochs
     num_samples: 3  # Number of validation samples to explain
     method: gradient  # 'gradient' or 'integrated_gradients'

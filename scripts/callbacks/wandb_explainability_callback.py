@@ -45,6 +45,10 @@ class WandbExplainabilityCallback(pl.Callback):
     ):
         """Log explainability artifacts at the end of validation."""
         
+        # Skip during sanity check
+        if trainer.sanity_checking:
+            return
+        
         # Only log every N epochs
         if trainer.current_epoch % self.log_every_n_epochs != 0:
             return

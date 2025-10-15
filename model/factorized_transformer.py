@@ -562,28 +562,40 @@ class FactorizedFireTransformer(pl.LightningModule):
         valid_tokens: Optional[torch.Tensor] = None
     ) -> Dict[str, Any]:
         """Standard gradient-based explanation."""
+        # Store original training mode
+        was_training = self.training
+        
         # Enable gradient tracking
-        fire_seq.requires_grad_(True)
-        static_data.requires_grad_(True)
-        wind_inputs.requires_grad_(True)
+        fire_seq = fire_seq.detach().requires_grad_(True)
+        static_data = static_data.detach().requires_grad_(True)
+        wind_inputs = wind_inputs.detach().requires_grad_(True)
         
-        # Forward pass with attention hooks
-        pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
+        # Set to train mode for gradient computation
+        self.train()
         
-        # Compute gradients
-        pred_sum = pred.sum()
-        pred_sum.backward()
-        
-        return {
-            'pred': pred.detach(),
-            'spatial_attention': self.explain_state.get('spatial_attention', []),
-            'temporal_attention': self.explain_state.get('temporal_attention', []),
-            'grads': {
-                'fire': fire_seq.grad.detach() if fire_seq.grad is not None else None,
-                'static': static_data.grad.detach() if static_data.grad is not None else None,
-                'wind': wind_inputs.grad.detach() if wind_inputs.grad is not None else None,
+        try:
+            # Forward pass with attention hooks
+            pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
+            
+            # Compute gradients
+            pred_sum = pred.sum()
+            pred_sum.backward()
+            
+            result = {
+                'pred': pred.detach(),
+                'spatial_attention': self.explain_state.get('spatial_attention', []),
+                'temporal_attention': self.explain_state.get('temporal_attention', []),
+                'grads': {
+                    'fire': fire_seq.grad.detach() if fire_seq.grad is not None else None,
+                    'static': static_data.grad.detach() if static_data.grad is not None else None,
+                    'wind': wind_inputs.grad.detach() if wind_inputs.grad is not None else None,
+                }
             }
-        }
+        finally:
+            # Restore original training mode
+            self.train(was_training)
+        
+        return result
     
     def _explain_integrated_gradients(
         self,
@@ -598,6 +610,10 @@ class FactorizedFireTransformer(pl.LightningModule):
         
         Computes gradients along interpolation path from baseline to input.
         """
+        # Store original training mode
+        was_training = self.training
+        self.train()
+        
         # Create baselines (zeros)
         fire_baseline = torch.zeros_like(fire_seq)
         static_baseline = torch.zeros_like(static_data)
@@ -647,7 +663,7 @@ class FactorizedFireTransformer(pl.LightningModule):
         with torch.no_grad():
             final_pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
         
-        return {
+        result = {
             'pred': final_pred,
             'spatial_attention': self.explain_state.get('spatial_attention', []),
             'temporal_attention': self.explain_state.get('temporal_attention', []),
@@ -657,3 +673,8 @@ class FactorizedFireTransformer(pl.LightningModule):
                 'wind': integrated_wind,
             }
         }
+        
+        # Restore original training mode
+        self.train(was_training)
+        
+        return result

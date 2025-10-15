@@ -466,7 +466,7 @@ class FactorizedFireTransformer(pl.LightningModule):
         return optim_dict
     
     def enable_explain(self, enabled: bool = True):
-        """Toggle explainability mode."""
+        """Toggle explainability mode and set up attention hooks."""
         self.explain_enabled = enabled
         if enabled:
             self.explain_state = {
@@ -475,16 +475,65 @@ class FactorizedFireTransformer(pl.LightningModule):
                 'wind_features': None,
                 'static_features': None
             }
+            self._attention_hooks = []
+            self._setup_attention_hooks()
+        else:
+            self._remove_attention_hooks()
+    
+    def _setup_attention_hooks(self):
+        """Set up hooks to capture attention weights automatically."""
+        
+        def spatial_attention_hook(module, input, output):
+            """Hook to capture spatial attention from ViT."""
+            if hasattr(module, 'attn_drop'):  # This is an Attention module
+                # Store attention weights if computed
+                if hasattr(module, 'get_attention_map'):
+                    attn = module.get_attention_map()
+                    if attn is not None:
+                        self.explain_state['spatial_attention'].append(attn.detach().cpu())
+        
+        def temporal_attention_hook(module, input, output):
+            """Hook to capture temporal attention from TransformerEncoder."""
+            if hasattr(output, 'size') and len(output.size()) == 3:  # [B, T, D]
+                # TransformerEncoderLayer stores attention in some implementations
+                if hasattr(module, 'self_attn') and hasattr(module.self_attn, '_attention_weights'):
+                    attn = module.self_attn._attention_weights
+                    self.explain_state['temporal_attention'].append(attn.detach().cpu())
+        
+        # Hook into spatial encoder ViT blocks
+        for block in self.spatial_encoder.vit.blocks:
+            handle = block.attn.register_forward_hook(spatial_attention_hook)
+            self._attention_hooks.append(handle)
+        
+        # Hook into temporal transformer layers
+        for layer in self.temporal_transformer.transformer.layers:
+            handle = layer.register_forward_hook(temporal_attention_hook)
+            self._attention_hooks.append(handle)
+    
+    def _remove_attention_hooks(self):
+        """Remove all attention hooks."""
+        if hasattr(self, '_attention_hooks'):
+            for hook in self._attention_hooks:
+                hook.remove()
+            self._attention_hooks = []
     
     def explain(
         self,
         fire_seq: torch.Tensor,
         static_data: torch.Tensor,
         wind_inputs: torch.Tensor,
-        valid_tokens: Optional[torch.Tensor] = None
+        valid_tokens: Optional[torch.Tensor] = None,
+        method: str = 'gradient'
     ) -> Dict[str, Any]:
         """
         Compute predictions with explainability artifacts.
+        
+        Args:
+            fire_seq: [B, C, H, W, T] fire progression
+            static_data: [B, C, H, W] static features
+            wind_inputs: [B, 2, T] wind vectors
+            valid_tokens: [B, T] valid timestep mask
+            method: 'gradient' or 'integrated_gradients'
         
         Returns:
             dict with keys:
@@ -495,20 +544,37 @@ class FactorizedFireTransformer(pl.LightningModule):
         """
         self.enable_explain(True)
         
+        if method == 'gradient':
+            result = self._explain_gradients(fire_seq, static_data, wind_inputs, valid_tokens)
+        elif method == 'integrated_gradients':
+            result = self._explain_integrated_gradients(fire_seq, static_data, wind_inputs, valid_tokens)
+        else:
+            raise ValueError(f"Unknown explanation method: {method}")
+        
+        self.enable_explain(False)
+        return result
+    
+    def _explain_gradients(
+        self,
+        fire_seq: torch.Tensor,
+        static_data: torch.Tensor,
+        wind_inputs: torch.Tensor,
+        valid_tokens: Optional[torch.Tensor] = None
+    ) -> Dict[str, Any]:
+        """Standard gradient-based explanation."""
         # Enable gradient tracking
         fire_seq.requires_grad_(True)
         static_data.requires_grad_(True)
         wind_inputs.requires_grad_(True)
         
         # Forward pass with attention hooks
-        # TODO: Add attention extraction hooks
         pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
         
         # Compute gradients
         pred_sum = pred.sum()
         pred_sum.backward()
         
-        result = {
+        return {
             'pred': pred.detach(),
             'spatial_attention': self.explain_state.get('spatial_attention', []),
             'temporal_attention': self.explain_state.get('temporal_attention', []),
@@ -518,6 +584,76 @@ class FactorizedFireTransformer(pl.LightningModule):
                 'wind': wind_inputs.grad.detach() if wind_inputs.grad is not None else None,
             }
         }
+    
+    def _explain_integrated_gradients(
+        self,
+        fire_seq: torch.Tensor,
+        static_data: torch.Tensor,
+        wind_inputs: torch.Tensor,
+        valid_tokens: Optional[torch.Tensor] = None,
+        steps: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Integrated Gradients for smoother attribution.
         
-        self.enable_explain(False)
-        return result
+        Computes gradients along interpolation path from baseline to input.
+        """
+        # Create baselines (zeros)
+        fire_baseline = torch.zeros_like(fire_seq)
+        static_baseline = torch.zeros_like(static_data)
+        wind_baseline = torch.zeros_like(wind_inputs)
+        
+        # Accumulate gradients
+        fire_grads = []
+        static_grads = []
+        wind_grads = []
+        
+        for step in range(steps):
+            # Interpolate between baseline and input
+            alpha = (step + 1) / steps
+            
+            fire_interp = fire_baseline + alpha * (fire_seq - fire_baseline)
+            static_interp = static_baseline + alpha * (static_data - static_baseline)
+            wind_interp = wind_baseline + alpha * (wind_inputs - wind_baseline)
+            
+            fire_interp.requires_grad_(True)
+            static_interp.requires_grad_(True)
+            wind_interp.requires_grad_(True)
+            
+            # Forward pass
+            pred = self(fire_interp, static_interp, wind_interp, valid_tokens)
+            
+            # Backward pass
+            pred_sum = pred.sum()
+            pred_sum.backward()
+            
+            # Collect gradients
+            if fire_interp.grad is not None:
+                fire_grads.append(fire_interp.grad.detach())
+            if static_interp.grad is not None:
+                static_grads.append(static_interp.grad.detach())
+            if wind_interp.grad is not None:
+                wind_grads.append(wind_interp.grad.detach())
+            
+            # Clear gradients
+            self.zero_grad()
+        
+        # Average gradients and multiply by input difference
+        integrated_fire = (fire_seq - fire_baseline) * torch.stack(fire_grads).mean(dim=0)
+        integrated_static = (static_data - static_baseline) * torch.stack(static_grads).mean(dim=0)
+        integrated_wind = (wind_inputs - wind_baseline) * torch.stack(wind_grads).mean(dim=0)
+        
+        # Final prediction with full input
+        with torch.no_grad():
+            final_pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
+        
+        return {
+            'pred': final_pred,
+            'spatial_attention': self.explain_state.get('spatial_attention', []),
+            'temporal_attention': self.explain_state.get('temporal_attention', []),
+            'grads': {
+                'fire': integrated_fire,
+                'static': integrated_static,
+                'wind': integrated_wind,
+            }
+        }

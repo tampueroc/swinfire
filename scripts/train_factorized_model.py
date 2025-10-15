@@ -8,8 +8,10 @@ import sys
 sys.path.append('..')
 
 from utils import Logger
+from utils.wandb_logger import get_wandb_logger
 from data import FireDataModule
 from callbacks import EarlyStoppingHandler, ImageLoggerHandler, LoggingCallback, FinalMetricsCallback
+from callbacks.wandb_explainability_callback import WandbExplainabilityCallback
 from model.factorized_transformer import FactorizedFireTransformer
 
 
@@ -24,14 +26,34 @@ def main(args):
     trainer_cfg = load_yaml_config(args.trainer_config)
     data_cfg = load_yaml_config(args.data_config)
 
-    # Logger
+    # Logger - Use W&B instead of TensorBoard
     logger_cfg = trainer_cfg['logger']
     if logger_cfg['enabled'] is True:
-        logger = Logger.get_tensorboard_logger(
-            save_dir=logger_cfg['dir'],
-            name=logger_cfg['name'],
-            default_hp_metric=logger_cfg['default_hp_metric']
-        )
+        logger_type = logger_cfg.get('type', 'wandb')  # Default to wandb
+        
+        if logger_type == 'wandb':
+            # Prepare config for wandb
+            wandb_config = {
+                **model_cfg,
+                **data_cfg,
+                **global_cfg
+            }
+            
+            logger = get_wandb_logger(
+                project=logger_cfg.get('project', 'fire-prediction'),
+                name=logger_cfg.get('name', 'factorized-transformer'),
+                entity=logger_cfg.get('entity', None),
+                config=wandb_config,
+                save_dir=logger_cfg.get('dir', './wandb'),
+                log_model=logger_cfg.get('log_model', True)
+            )
+        else:
+            # Fallback to TensorBoard
+            logger = Logger.get_tensorboard_logger(
+                save_dir=logger_cfg['dir'],
+                name=logger_cfg['name'],
+                default_hp_metric=logger_cfg.get('default_hp_metric', False)
+            )
     else:
         logger = None
 
@@ -71,6 +93,16 @@ def main(args):
     if learning_rate_monitor_callback_cfg.get('enabled', False) is not False:
         learning_rate_monitor = LearningRateMonitor()
         callbacks.append(learning_rate_monitor)
+    
+    # W&B Explainability Callback
+    wandb_explainability_cfg = callbacks_cfg.get('wandb_explainability', {})
+    if wandb_explainability_cfg.get('enabled', False) is True and logger_cfg.get('type') == 'wandb':
+        wandb_explainability_callback = WandbExplainabilityCallback(
+            log_every_n_epochs=wandb_explainability_cfg.get('log_every_n_epochs', 5),
+            num_samples=wandb_explainability_cfg.get('num_samples', 3),
+            method=wandb_explainability_cfg.get('method', 'gradient')
+        )
+        callbacks.append(wandb_explainability_callback)
 
     # Datamodule
     datamodule = FireDataModule(

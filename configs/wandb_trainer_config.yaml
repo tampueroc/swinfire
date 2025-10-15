@@ -1,0 +1,52 @@
+# Trainer Configuration with W&B Logging
+
+max_epochs: 100
+accelerator: auto  # auto, gpu, cpu, mps
+devices: 1
+precision: 32  # 16, 32, bf16
+strategy: auto  # auto, ddp, ddp_spawn
+fast_dev_run: false  # Set to true for quick testing
+accumulate_grad_batches: 1  # Gradient accumulation
+profiler: simple  # simple, advanced
+
+# W&B Logger Configuration
+logger:
+  enabled: true
+  type: wandb  # 'wandb' or 'tensorboard'
+  project: fire-prediction  # Your W&B project name
+  name: factorized-transformer-v1  # Run name
+  entity: null  # Your W&B team/username (null = personal account)
+  dir: ./wandb  # Local directory for wandb logs
+  log_model: true  # Log model checkpoints to W&B
+  # Optional: add tags
+  # tags: ["transformer", "explainability", "thesis"]
+
+# Callbacks
+callbacks:
+  early_stopper:
+    enabled: true
+    monitor: val_loss
+    patience: 10
+    mode: min
+    min_delta: 0.001
+  
+  image_logger:
+    enabled: false  # Disable if using wandb_explainability
+  
+  logging_callback:
+    enabled: true
+  
+  final_metrics_callback:
+    enabled: true
+    on_training_data: false
+    on_validation_data: true
+  
+  learning_rate_monitor:
+    enabled: true
+  
+  # W&B Explainability Callback (NEW!)
+  wandb_explainability:
+    enabled: true  # Set to true to log explainability visualizations
+    log_every_n_epochs: 5  # Log explanations every N epochs
+    num_samples: 3  # Number of validation samples to explain
+    method: gradient  # 'gradient' or 'integrated_gradients'

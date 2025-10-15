@@ -141,8 +141,9 @@ def main(args):
         loss_fn_settings=model_cfg['loss_fn_settings']
     )
     
-    model.hparams.update(datamodule.hparams)
-    model.save_hyperparameters()
+    # Don't call save_hyperparameters() - wandb config already logged during logger init
+    # model.hparams.update(datamodule.hparams)
+    # model.save_hyperparameters()
     
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
     print(f"  - Spatial depth: {model_cfg['spatial_depth']}")

@@ -29,7 +29,15 @@ class FinalMetricsCallback(pl.Callback):
                 "hp/val_accuracy": 0, "hp/val_precision": 0, "hp/val_recall": 0, "hp/val_f1": 0, "hp/val_jaccard_index": 0
             })
 
-        trainer.logger.log_hyperparams(pl_module.hparams, metrics_init)
+        # WandbLogger has different signature than TensorBoardLogger
+        from pytorch_lightning.loggers import WandbLogger
+        if isinstance(trainer.logger, WandbLogger):
+            # W&B doesn't need metrics_init upfront, just log hyperparams
+            if hasattr(pl_module, 'hparams') and pl_module.hparams:
+                trainer.logger.log_hyperparams(pl_module.hparams)
+        else:
+            # TensorBoard logger accepts metrics
+            trainer.logger.log_hyperparams(pl_module.hparams, metrics_init)
 
     def compute_metrics(self, model, dataloader):
         """Computes accuracy, precision, recall, and F1-score for a given dataset using torchmetrics."""
@@ -66,12 +74,18 @@ class FinalMetricsCallback(pl.Callback):
 
     def on_train_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Called at the end of training to log final metrics under hparams."""
-        tensorboard_logger = pl_module.logger.experiment
+        from pytorch_lightning.loggers import WandbLogger
+        
+        is_wandb = isinstance(trainer.logger, WandbLogger)
+        logger = pl_module.logger.experiment
 
         if self.on_training_data and trainer.train_dataloader is not None:
             train_metrics = self.compute_metrics(pl_module, trainer.train_dataloader)
             for k, v in train_metrics.items():
-                tensorboard_logger.add_scalar(f"hp/train_{k}", v)
+                if is_wandb:
+                    logger.log({f"hp/train_{k}": v})
+                else:
+                    logger.add_scalar(f"hp/train_{k}", v)
 
         if self.on_validation_data:
             val_loader = (
@@ -80,7 +94,10 @@ class FinalMetricsCallback(pl.Callback):
             if val_loader is not None:
                 val_metrics = self.compute_metrics(pl_module, val_loader)
                 for k, v in val_metrics.items():
-                    tensorboard_logger.add_scalar(f"hp/val_{k}", v)
+                    if is_wandb:
+                        logger.log({f"hp/val_{k}": v})
+                    else:
+                        logger.add_scalar(f"hp/val_{k}", v)
 
         print("Logged Final Metrics.")
 

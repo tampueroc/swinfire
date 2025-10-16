@@ -391,7 +391,11 @@ class FactorizedFireTransformer(pl.LightningModule):
         # Crop prediction to match target (if needed)
         pred = pred[..., 56:-56, 56:-56]
         
-        loss = self.loss_fn(pred, isochrone_mask)
+        # Extract positive class for binary loss (2 channels -> 1 channel)
+        pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred  # Keep as [B, 1, H, W]
+        target_fire = isochrone_mask[:, 1:2, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask
+        
+        loss = self.loss_fn(pred_fire, target_fire)
         self.log("train_loss", loss)
         
         # For metrics: extract positive class and apply sigmoid
@@ -421,7 +425,11 @@ class FactorizedFireTransformer(pl.LightningModule):
         # Crop prediction to match target (if needed)
         pred = pred[..., 56:-56, 56:-56]
         
-        loss = self.loss_fn(pred, isochrone_mask)
+        # Extract positive class for binary loss
+        pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred
+        target_fire = isochrone_mask[:, 1:2, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask
+        
+        loss = self.loss_fn(pred_fire, target_fire)
         self.log("val_loss", loss)
         
         # For metrics: extract positive class and apply sigmoid

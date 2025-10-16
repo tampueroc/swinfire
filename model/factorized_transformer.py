@@ -393,13 +393,23 @@ class FactorizedFireTransformer(pl.LightningModule):
         fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
         pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
 
-        # --- ensure same spatial crop for preds AND targets ---
-        pred = pred[..., 56:-56, 56:-56]
-        tgt = isochrone_mask[..., 56:-56, 56:-56]
-
-        # --- binary loss expects matching channels ---
-        pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred  # [B,1,H,W]
-        target_fire = tgt[:, 1:2, :, :] if tgt.shape[1] == 2 else tgt    # [B,1,H,W]
+        # --- DON'T crop target if it's already 400x400 ---
+        # Only crop prediction to match target size
+        target_fire = isochrone_mask[:, 1:2, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask
+        
+        # Crop or interpolate pred to match target size
+        if pred.shape[-2:] != target_fire.shape[-2:]:
+            if pred.shape[-2] > target_fire.shape[-2]:
+                # Crop prediction
+                crop_h = (pred.shape[-2] - target_fire.shape[-2]) // 2
+                crop_w = (pred.shape[-1] - target_fire.shape[-1]) // 2
+                pred = pred[..., crop_h:-crop_h if crop_h > 0 else None, 
+                          crop_w:-crop_w if crop_w > 0 else None]
+            else:
+                # Interpolate prediction up
+                pred = F.interpolate(pred, size=target_fire.shape[-2:], mode='bilinear', align_corners=False)
+        
+        pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred
         loss = self.loss_fn(pred_fire, target_fire)
         self.log("train/loss", loss, on_step=True, on_epoch=False, prog_bar=True, logger=True)
 
@@ -432,11 +442,20 @@ class FactorizedFireTransformer(pl.LightningModule):
         fire_seq, static_data, wind_inputs, isochrone_mask, valid_tokens = batch
         pred = self(fire_seq, static_data, wind_inputs, valid_tokens)
 
-        pred = pred[..., 56:-56, 56:-56]
-        tgt = isochrone_mask[..., 56:-56, 56:-56]
-
+        # Extract target first
+        target_fire = isochrone_mask[:, 1:2, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask
+        
+        # Match prediction size to target
+        if pred.shape[-2:] != target_fire.shape[-2:]:
+            if pred.shape[-2] > target_fire.shape[-2]:
+                crop_h = (pred.shape[-2] - target_fire.shape[-2]) // 2
+                crop_w = (pred.shape[-1] - target_fire.shape[-1]) // 2
+                pred = pred[..., crop_h:-crop_h if crop_h > 0 else None, 
+                          crop_w:-crop_w if crop_w > 0 else None]
+            else:
+                pred = F.interpolate(pred, size=target_fire.shape[-2:], mode='bilinear', align_corners=False)
+        
         pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred
-        target_fire = tgt[:, 1:2, :, :] if tgt.shape[1] == 2 else tgt
 
         loss = self.loss_fn(pred_fire, target_fire)
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)

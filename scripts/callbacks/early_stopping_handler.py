@@ -5,7 +5,7 @@ class EarlyStoppingHandler:
     Manages early stopping during training.
     """
     @staticmethod
-    def get_early_stopping_callback(monitor="val_loss", patience=5, mode="min", min_delta=0.01):
+    def get_early_stopping_callback(monitor="val/loss", patience=5, mode="min", min_delta=0.01):
         """
         Creates an EarlyStopping callback.
         Args:

@@ -200,10 +200,15 @@ class SpatialDecoder(nn.Module):
         # Reshape patches to 2D grid
         H = W = self.num_patches_per_side
         features = rearrange(patch_features, 'b (h w) c -> b c h w', h=H, w=W)
-
+        
         # Upsample to full resolution
-        output = self.decoder(features)  # [B, num_classes, img_size, img_size]
-
+        output = self.decoder(features)  # [B, num_classes, ?, ?]
+        
+        # Ensure output is exactly img_size x img_size using interpolation
+        if output.shape[-2:] != (self.img_size, self.img_size):
+            output = F.interpolate(output, size=(self.img_size, self.img_size), 
+                                  mode='bilinear', align_corners=False)
+        
         return output
 
 

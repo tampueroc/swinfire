@@ -3,7 +3,7 @@ accelerator: gpu
 devices: 1
 precision: 16-mixed
 strategy: auto
-fast_dev_run: 1
+fast_dev_run: false
 accumulate_grad_batches: 4
 profiler: simple
 
@@ -16,7 +16,7 @@ logger:
 callbacks:
   early_stopper:
     enabled: true
-    monitor: val_loss   # Metric to monitor
+    monitor: val/loss   # Metric to monitor
     patience: 5        # Number of epochs to wait for improvement
     mode: min           # Options: 'min' or 'max'
     min_delta: 0.01    # Minimum change to qualify as an improvement

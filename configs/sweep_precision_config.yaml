@@ -1,0 +1,51 @@
+# WandB Sweep Configuration - Optimize for 85% Precision
+program: scripts/train_factorized_model.py
+method: bayes  # Bayesian optimization (smarter than grid/random)
+metric:
+  name: val_precision
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 3
+
+parameters:
+  # Loss function tuning (most important for precision)
+  loss_fn_settings.weight:
+    distribution: uniform
+    min: 0.2
+    max: 0.5
+  
+  loss_fn_settings.delta:
+    distribution: uniform
+    min: 0.6
+    max: 0.9
+  
+  loss_fn_settings.gamma:
+    distribution: uniform
+    min: 1.0
+    max: 2.5
+  
+  # Learning rate (affects convergence)
+  optimizer_settings.learning_rate:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.001
+  
+  # Architecture (smaller changes)
+  embed_dim:
+    values: [256, 384]
+  
+  spatial_depth:
+    values: [3, 4, 5]
+  
+  temporal_depth:
+    values: [3, 4, 5]
+  
+  dropout:
+    distribution: uniform
+    min: 0.05
+    max: 0.2
+
+# Constraints (optional - keep recall reasonable)
+# Note: WandB doesn't have native constraint support, but you can stop runs manually
+# Target: precision >= 0.85 AND recall >= 0.60

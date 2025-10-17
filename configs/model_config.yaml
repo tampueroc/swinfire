@@ -16,7 +16,7 @@ optimizer_settings:
   weight_decay: 0
 lr_scheduler:
   scheduler: reduce_lr_on_plateau
-  monitor: val/loss
+  monitor: val_loss
   patience: 3
   threshold: 0.01
   cooldown: 1

@@ -24,7 +24,7 @@ optimizer_settings:
 # Learning rate scheduler
 lr_scheduler:
   scheduler: reduce_lr_on_plateau
-  monitor: val/loss
+  monitor: val_loss
   patience: 5                  # Patience epochs
   threshold: 0.001
   cooldown: 2

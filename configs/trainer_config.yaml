@@ -16,7 +16,7 @@ logger:
 callbacks:
   early_stopper:
     enabled: true
-    monitor: val/loss   # Metric to monitor
+    monitor: val_loss   # Metric to monitor
     patience: 5        # Number of epochs to wait for improvement
     mode: min           # Options: 'min' or 'max'
     min_delta: 0.01    # Minimum change to qualify as an improvement

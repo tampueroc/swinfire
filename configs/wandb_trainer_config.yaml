@@ -25,7 +25,7 @@ logger:
 callbacks:
   early_stopper:
     enabled: true
-    monitor: val/loss
+    monitor: val_loss
     patience: 10
     mode: min
     min_delta: 0.001

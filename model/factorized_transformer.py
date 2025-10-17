@@ -144,8 +144,89 @@ class TemporalTransformer(nn.Module):
         return output
 
 
+class SpatialAttention(nn.Module):
+    """Spatial attention module to focus on fire regions."""
+    
+    def __init__(self, channels: int):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(channels, channels // 8, kernel_size=1),
+            nn.BatchNorm2d(channels // 8),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels // 8, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        attention = self.conv(x)  # [B, 1, H, W]
+        return x * attention
+
+
+class ChannelAttention(nn.Module):
+    """Channel attention via global pooling."""
+    
+    def __init__(self, channels: int, reduction: int = 8):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channels, channels // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channels // reduction, channels, bias=False),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        B, C, _, _ = x.shape
+        avg_out = self.fc(self.avg_pool(x).view(B, C))
+        max_out = self.fc(self.max_pool(x).view(B, C))
+        attention = (avg_out + max_out).view(B, C, 1, 1)
+        return x * attention
+
+
+class ResidualUpsampleBlock(nn.Module):
+    """Residual block with upsampling and attention."""
+    
+    def __init__(self, in_channels: int, out_channels: int, use_attention: bool = True):
+        super().__init__()
+        self.use_attention = use_attention
+        
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+        
+        self.conv = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels)
+        )
+        
+        if use_attention:
+            self.channel_attn = ChannelAttention(out_channels)
+            self.spatial_attn = SpatialAttention(out_channels)
+        
+        self.relu = nn.ReLU(inplace=True)
+    
+    def forward(self, x):
+        x = self.upsample(x)
+        residual = x
+        
+        x = self.conv(x)
+        x = x + residual  # Residual connection
+        
+        if self.use_attention:
+            x = self.channel_attn(x)
+            x = self.spatial_attn(x)
+        
+        return self.relu(x)
+
+
 class SpatialDecoder(nn.Module):
-    """Decoder to upsample from patches to full resolution."""
+    """Enhanced decoder with multi-scale skips and attention."""
 
     def __init__(
         self,
@@ -154,7 +235,8 @@ class SpatialDecoder(nn.Module):
         img_size: int = 512,
         num_classes: int = 2,
         hidden_dim: int = 256,
-        use_skip: bool = True
+        use_skip: bool = True,
+        use_attention: bool = True
     ):
         super().__init__()
 
@@ -162,50 +244,50 @@ class SpatialDecoder(nn.Module):
         self.img_size = img_size
         self.num_patches_per_side = img_size // patch_size
         self.use_skip = use_skip
+        self.use_attention = use_attention
 
         # Calculate number of upsampling layers needed
-        # From patch_size x patch_size grid to img_size x img_size
-        # Each ConvTranspose2d with stride=2 doubles the resolution
         num_upsample_layers = int(torch.log2(torch.tensor(patch_size)).item())
 
-        # Skip connection fusion layer
+        # Multi-scale skip connection fusion (first + last timestep)
         if use_skip:
             self.skip_fusion = nn.Sequential(
-                nn.Conv2d(embed_dim * 2, embed_dim, kernel_size=1),
+                nn.Conv2d(embed_dim * 3, embed_dim, kernel_size=1),  # 3x because: temporal + first + last
                 nn.BatchNorm2d(embed_dim),
                 nn.ReLU(inplace=True)
             )
 
-        layers = []
-        in_ch = embed_dim
-
         # Initial conv
-        layers.extend([
-            nn.Conv2d(in_ch, hidden_dim, kernel_size=3, padding=1),
+        self.init_conv = nn.Sequential(
+            nn.Conv2d(embed_dim, hidden_dim, kernel_size=3, padding=1),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU(inplace=True)
-        ])
+        )
 
-        # Upsampling layers
+        # Residual upsampling blocks with attention
+        self.upsample_blocks = nn.ModuleList()
         out_ch = hidden_dim
         for i in range(num_upsample_layers):
-            layers.extend([
-                nn.ConvTranspose2d(out_ch, out_ch // 2, kernel_size=4, stride=2, padding=1),
-                nn.BatchNorm2d(out_ch // 2),
-                nn.ReLU(inplace=True)
-            ])
+            use_attn = use_attention and (i >= num_upsample_layers - 2)  # Attention on last 2 layers
+            self.upsample_blocks.append(
+                ResidualUpsampleBlock(out_ch, out_ch // 2, use_attention=use_attn)
+            )
             out_ch = out_ch // 2
 
         # Final classification layer
-        layers.append(nn.Conv2d(out_ch, num_classes, kernel_size=1))
+        self.final_conv = nn.Conv2d(out_ch, num_classes, kernel_size=1)
 
-        self.decoder = nn.Sequential(*layers)
-
-    def forward(self, patch_features: torch.Tensor, skip_features: torch.Tensor = None) -> torch.Tensor:
+    def forward(
+        self, 
+        patch_features: torch.Tensor, 
+        skip_first: torch.Tensor = None,
+        skip_last: torch.Tensor = None
+    ) -> torch.Tensor:
         """
         Args:
             patch_features: [B, num_patches, embed_dim] - features from temporal transformer
-            skip_features: [B, num_patches, embed_dim] - skip connection from spatial encoder
+            skip_first: [B, num_patches, embed_dim] - skip from first timestep
+            skip_last: [B, num_patches, embed_dim] - skip from last timestep
 
         Returns:
             [B, num_classes, H, W] - full resolution prediction
@@ -216,16 +298,29 @@ class SpatialDecoder(nn.Module):
         H = W = self.num_patches_per_side
         features = rearrange(patch_features, 'b (h w) c -> b c h w', h=H, w=W)
 
-        # Fuse with skip connections if provided
-        if self.use_skip and skip_features is not None:
-            skip = rearrange(skip_features, 'b (h w) c -> b c h w', h=H, w=W)
-            features = torch.cat([features, skip], dim=1)  # [B, embed_dim*2, H, W]
+        # Fuse with multi-scale skip connections
+        if self.use_skip and skip_first is not None:
+            skip_f = rearrange(skip_first, 'b (h w) c -> b c h w', h=H, w=W)
+            
+            if skip_last is not None:
+                skip_l = rearrange(skip_last, 'b (h w) c -> b c h w', h=H, w=W)
+                features = torch.cat([features, skip_f, skip_l], dim=1)  # [B, embed_dim*3, H, W]
+            else:
+                features = torch.cat([features, skip_f], dim=1)  # [B, embed_dim*2, H, W]
+            
             features = self.skip_fusion(features)  # [B, embed_dim, H, W]
 
-        # Upsample to full resolution
-        output = self.decoder(features)  # [B, num_classes, ?, ?]
+        # Initial convolution
+        features = self.init_conv(features)
 
-        # Ensure output is exactly img_size x img_size using interpolation
+        # Residual upsampling with attention
+        for block in self.upsample_blocks:
+            features = block(features)
+
+        # Final classification
+        output = self.final_conv(features)
+
+        # Ensure output is exactly img_size x img_size
         if output.shape[-2:] != (self.img_size, self.img_size):
             output = F.interpolate(output, size=(self.img_size, self.img_size),
                                   mode='bilinear', align_corners=False)
@@ -378,8 +473,9 @@ class FactorizedFireTransformer(pl.LightningModule):
         # Stack into: [B, T, num_patches, embed_dim]
         spatial_tokens_all = torch.stack(spatial_tokens_all, dim=1)
         
-        # Store first timestep tokens for skip connection
-        skip_features = spatial_tokens_all[:, 0, :, :]  # [B, num_patches, embed_dim]
+        # Store first and last timestep tokens for multi-scale skip connections
+        skip_first = spatial_tokens_all[:, 0, :, :]  # [B, num_patches, embed_dim]
+        skip_last = spatial_tokens_all[:, -1, :, :]  # [B, num_patches, embed_dim]
 
         # 3. Reshape for per-patch temporal modeling
         # [B, T, num_patches, embed_dim] -> [B, num_patches, T, embed_dim]
@@ -424,8 +520,8 @@ class FactorizedFireTransformer(pl.LightningModule):
         # Reshape back to [B, num_patches, embed_dim]
         patch_features = rearrange(final_feat, '(b p) c -> b p c', b=B, p=num_patches)
 
-        # 7. Decode to spatial prediction with skip connections
-        output = self.decoder(patch_features, skip_features)  # [B, num_classes, H, W]
+        # 7. Decode to spatial prediction with multi-scale skip connections
+        output = self.decoder(patch_features, skip_first, skip_last)  # [B, num_classes, H, W]
 
         return output
 

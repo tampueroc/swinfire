@@ -205,11 +205,21 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # Initialize WandB first if running in sweep (before argparse)
+    # This populates wandb.config with sweep parameters
+    if 'WANDB_SWEEP_ID' in os.environ:
+        wandb.init()
+    
     parser = argparse.ArgumentParser(description="Train FactorizedFireTransformer model")
     parser.add_argument("--global_config", default="configs/global_config.yaml", help="Path to global config.")
     parser.add_argument("--trainer_config", default="configs/trainer_config.yaml", help="Path to trainer config.")
     parser.add_argument("--data_config", default="configs/data_config.yaml", help="Path to data config.")
     parser.add_argument("--model_config", default="configs/factorized_model_config.yaml", 
                         help="Path to model config (default: factorized_model_config.yaml)")
-    args = parser.parse_args()
+    
+    # Parse only known args to ignore WandB sweep parameters passed as CLI
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        print(f"Info: Ignoring unknown arguments (from WandB sweep): {unknown}")
+    
     main(args)

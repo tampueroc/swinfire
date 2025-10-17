@@ -56,13 +56,32 @@ class FinalMetricsCallback(pl.Callback):
                 wind_inputs = wind_inputs.to(model.device)
                 isochrone_mask = isochrone_mask[0].to(model.device)
                 pred = model(fire_seq, static_data, wind_inputs)
-                pred = pred[..., 56:-56, 56:-56]  # Cropping like in validation_step
+                
+                # Extract fire class and apply sigmoid
+                target_fire = isochrone_mask[:, 1:2, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask
+                pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred
+                
+                # Match shapes (crop or interpolate)
+                if pred_fire.shape[-2:] != target_fire.shape[-2:]:
+                    if pred_fire.shape[-2] > target_fire.shape[-2]:
+                        crop_h = (pred_fire.shape[-2] - target_fire.shape[-2]) // 2
+                        crop_w = (pred_fire.shape[-1] - target_fire.shape[-1]) // 2
+                        pred_fire = pred_fire[..., crop_h:-crop_h if crop_h > 0 else None,
+                                             crop_w:-crop_w if crop_w > 0 else None]
+                    else:
+                        pred_fire = torch.nn.functional.interpolate(
+                            pred_fire, size=target_fire.shape[-2:], mode='bilinear', align_corners=False
+                        )
+                
+                # Convert to probabilities and binary targets
+                pred_probs = torch.sigmoid(pred_fire).squeeze(1)  # [B, H, W]
+                target_binary = target_fire.squeeze(1).int()     # [B, H, W]
 
-                accuracy.update(pred, isochrone_mask.int())
-                precision.update(pred, isochrone_mask.int())
-                recall.update(pred, isochrone_mask.int())
-                f1.update(pred, isochrone_mask.int())
-                jaccard_index.update(pred, isochrone_mask.int())
+                accuracy.update(pred_probs, target_binary)
+                precision.update(pred_probs, target_binary)
+                recall.update(pred_probs, target_binary)
+                f1.update(pred_probs, target_binary)
+                jaccard_index.update(pred_probs, target_binary)
 
         return {
             "accuracy": accuracy.compute().item(),

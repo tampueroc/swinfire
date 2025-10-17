@@ -457,23 +457,38 @@ class FactorizedFireTransformer(pl.LightningModule):
         pred_probs = torch.sigmoid(pred_fire).squeeze(1)          # [B,H,W]
         target_binary = target_fire.squeeze(1).int()              # [B,H,W]
 
-        # --- STEP SCALARS: compute quick batch numbers (no stateful Metric) ---
+        # --- STEP METRICS: fire-class specific for progress bar ---
         pred_labels = (pred_probs >= 0.5).int()
-        acc_step = (pred_labels == target_binary).float().mean()
-        self.log("train/acc_step", acc_step, on_step=True, on_epoch=False, prog_bar=True, logger=True)
+        
+        # Fire pixels only
+        fire_mask = (target_binary == 1)
+        if fire_mask.sum() > 0:
+            fire_precision_step = (pred_labels[fire_mask] == 1).float().mean()
+            fire_recall_step = (pred_labels[fire_mask] == 1).float().mean()
+        else:
+            fire_precision_step = torch.tensor(0.0, device=pred_labels.device)
+            fire_recall_step = torch.tensor(0.0, device=pred_labels.device)
+        
+        # Log class distribution for context
+        fire_ratio = fire_mask.float().mean()
+        
+        self.log("train/fire_precision_step", fire_precision_step, on_step=True, on_epoch=False, prog_bar=True, logger=True)
+        self.log("train/fire_recall_step", fire_recall_step, on_step=True, on_epoch=False, prog_bar=True, logger=True)
+        self.log("train/fire_ratio", fire_ratio, on_step=True, on_epoch=False, prog_bar=False, logger=True)
 
-        # --- EPOCH METRICS: update stateful torchmetrics, log on_epoch only ---
+        # --- EPOCH METRICS: update stateful torchmetrics ---
         self.train_accuracy.update(pred_probs, target_binary)
         self.train_precision.update(pred_probs, target_binary)
         self.train_recall.update(pred_probs, target_binary)
         self.train_f1.update(pred_probs, target_binary)
         self.train_jaccard_index.update(pred_probs, target_binary)
 
-        self.log("train/accuracy", self.train_accuracy, on_step=False, on_epoch=True, prog_bar=False)
-        self.log("train/precision", self.train_precision, on_step=False, on_epoch=True)
-        self.log("train/recall", self.train_recall, on_step=False, on_epoch=True)
-        self.log("train/f1", self.train_f1, on_step=False, on_epoch=True)
-        self.log("train/jaccard", self.train_jaccard_index, on_step=False, on_epoch=True)
+        # Log epoch metrics (removed accuracy from display, still logged for reference)
+        self.log("train/accuracy", self.train_accuracy, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        self.log("train/precision", self.train_precision, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("train/recall", self.train_recall, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("train/f1", self.train_f1, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("train/iou", self.train_jaccard_index, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
         return {"loss": loss}
 
@@ -503,17 +518,23 @@ class FactorizedFireTransformer(pl.LightningModule):
         pred_probs = torch.sigmoid(pred_fire).squeeze(1)  # [B,H,W]
         target_binary = target_fire.squeeze(1).int()      # [B,H,W]
 
+        # Log class distribution for validation too
+        fire_mask = (target_binary == 1)
+        fire_ratio = fire_mask.float().mean()
+        self.log("val/fire_ratio", fire_ratio, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+
         self.val_accuracy.update(pred_probs, target_binary)
         self.val_precision.update(pred_probs, target_binary)
         self.val_recall.update(pred_probs, target_binary)
         self.val_f1.update(pred_probs, target_binary)
         self.val_jaccard_index.update(pred_probs, target_binary)
 
-        self.log("val/accuracy", self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/precision", self.val_precision, on_step=False, on_epoch=True)
-        self.log("val/recall", self.val_recall, on_step=False, on_epoch=True)
-        self.log("val/f1", self.val_f1, on_step=False, on_epoch=True)
-        self.log("val/jaccard", self.val_jaccard_index, on_step=False, on_epoch=True)
+        # Show fire-specific metrics in progress bar, hide accuracy
+        self.log("val/accuracy", self.val_accuracy, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        self.log("val/precision", self.val_precision, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val/recall", self.val_recall, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val/f1", self.val_f1, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val/iou", self.val_jaccard_index, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
         return {"loss": loss}
 

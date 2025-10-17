@@ -556,17 +556,22 @@ class FactorizedFireTransformer(pl.LightningModule):
         # --- STEP METRICS: fire-class specific for progress bar ---
         pred_labels = (pred_probs >= 0.5).int()
         
-        # Fire pixels only
-        fire_mask = (target_binary == 1)
-        if fire_mask.sum() > 0:
-            fire_precision_step = (pred_labels[fire_mask] == 1).float().mean()
-            fire_recall_step = (pred_labels[fire_mask] == 1).float().mean()
+        # Precision: Of predicted fire pixels, how many are actually fire?
+        pred_fire_mask = (pred_labels == 1)
+        if pred_fire_mask.sum() > 0:
+            fire_precision_step = (target_binary[pred_fire_mask] == 1).float().mean()
         else:
             fire_precision_step = torch.tensor(0.0, device=pred_labels.device)
+        
+        # Recall: Of actual fire pixels, how many did we predict?
+        actual_fire_mask = (target_binary == 1)
+        if actual_fire_mask.sum() > 0:
+            fire_recall_step = (pred_labels[actual_fire_mask] == 1).float().mean()
+        else:
             fire_recall_step = torch.tensor(0.0, device=pred_labels.device)
         
         # Log class distribution for context
-        fire_ratio = fire_mask.float().mean()
+        fire_ratio = actual_fire_mask.float().mean()
         
         self.log("train_fire_precision_step", fire_precision_step, on_step=True, on_epoch=False, prog_bar=True, logger=True)
         self.log("train_fire_recall_step", fire_recall_step, on_step=True, on_epoch=False, prog_bar=True, logger=True)

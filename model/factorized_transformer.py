@@ -60,25 +60,29 @@ class SpatialEncoder(nn.Module):
         Returns:
             [B, num_patches, embed_dim] - spatial tokens
         """
-        # Concatenate fire and static as input channels (not add in feature space)
-        # Downsample static to match fire frame if needed
-        if static_feat.shape[-2:] != fire_frame.shape[-2:]:
-            static_feat = F.interpolate(static_feat, size=fire_frame.shape[-2:], mode='bilinear')
-
-        # Reduce static_feat to match in_chans dimension for concatenation
-        # We'll use a 1x1 conv to project it down to fire_frame channels
-        static_reduced = F.adaptive_avg_pool2d(static_feat, 1)  # Global pool
-        static_scalar = static_reduced.flatten(1)  # [B, embed_dim]
-
-        # Extract spatial features from fire frame only
+        # Extract spatial features from fire frame
         tokens = self.vit.forward_features(fire_frame)  # [B, num_patches+1, embed_dim] (with cls token)
 
         # Remove cls token if present
         if tokens.shape[1] == self.num_patches + 1:
             tokens = tokens[:, 1:, :]  # Remove cls token
 
-        # Add static features as a global bias
-        tokens = tokens + static_scalar.unsqueeze(1)  # Broadcast [B, 1, embed_dim]
+        # Now tokens shape: [B, num_patches, embed_dim]
+        # Interpolate static features to patch resolution
+        B, P, C = tokens.shape
+        H = W = int(P ** 0.5)  # num_patches = H*W
+        
+        # Reshape tokens to spatial grid
+        tokens_spatial = rearrange(tokens, 'b (h w) c -> b c h w', h=H, w=W)
+        
+        # Downsample static features to patch resolution
+        static_patches = F.interpolate(static_feat, size=(H, W), mode='bilinear', align_corners=False)
+        
+        # Fuse static features per-patch (addition)
+        tokens_spatial = tokens_spatial + static_patches
+        
+        # Reshape back to patch tokens
+        tokens = rearrange(tokens_spatial, 'b c h w -> b (h w) c')
 
         return tokens  # [B, num_patches, embed_dim]
 
@@ -149,18 +153,28 @@ class SpatialDecoder(nn.Module):
         patch_size: int = 32,
         img_size: int = 512,
         num_classes: int = 2,
-        hidden_dim: int = 256
+        hidden_dim: int = 256,
+        use_skip: bool = True
     ):
         super().__init__()
 
         self.patch_size = patch_size
         self.img_size = img_size
         self.num_patches_per_side = img_size // patch_size
+        self.use_skip = use_skip
 
         # Calculate number of upsampling layers needed
         # From patch_size x patch_size grid to img_size x img_size
         # Each ConvTranspose2d with stride=2 doubles the resolution
         num_upsample_layers = int(torch.log2(torch.tensor(patch_size)).item())
+
+        # Skip connection fusion layer
+        if use_skip:
+            self.skip_fusion = nn.Sequential(
+                nn.Conv2d(embed_dim * 2, embed_dim, kernel_size=1),
+                nn.BatchNorm2d(embed_dim),
+                nn.ReLU(inplace=True)
+            )
 
         layers = []
         in_ch = embed_dim
@@ -187,10 +201,11 @@ class SpatialDecoder(nn.Module):
 
         self.decoder = nn.Sequential(*layers)
 
-    def forward(self, patch_features: torch.Tensor) -> torch.Tensor:
+    def forward(self, patch_features: torch.Tensor, skip_features: torch.Tensor = None) -> torch.Tensor:
         """
         Args:
-            patch_features: [B, num_patches, embed_dim]
+            patch_features: [B, num_patches, embed_dim] - features from temporal transformer
+            skip_features: [B, num_patches, embed_dim] - skip connection from spatial encoder
 
         Returns:
             [B, num_classes, H, W] - full resolution prediction
@@ -200,6 +215,12 @@ class SpatialDecoder(nn.Module):
         # Reshape patches to 2D grid
         H = W = self.num_patches_per_side
         features = rearrange(patch_features, 'b (h w) c -> b c h w', h=H, w=W)
+
+        # Fuse with skip connections if provided
+        if self.use_skip and skip_features is not None:
+            skip = rearrange(skip_features, 'b (h w) c -> b c h w', h=H, w=W)
+            features = torch.cat([features, skip], dim=1)  # [B, embed_dim*2, H, W]
+            features = self.skip_fusion(features)  # [B, embed_dim, H, W]
 
         # Upsample to full resolution
         output = self.decoder(features)  # [B, num_classes, ?, ?]
@@ -347,45 +368,64 @@ class FactorizedFireTransformer(pl.LightningModule):
         # 1. Encode static data once
         static_feat = self.static_encoder(static_data)  # [B, embed_dim, H, W]
 
-        # 2. Spatially encode each timestep
-        spatial_features = []
+        # 2. Spatially encode each timestep - KEEP PATCH TOKENS
+        spatial_tokens_all = []
         for t in range(T):
             frame = fire_seq[..., t]  # [B, C, H, W]
             tokens = self.spatial_encoder(frame, static_feat)  # [B, num_patches, embed_dim]
+            spatial_tokens_all.append(tokens)
 
-            # Global average pooling over patches
-            feat = tokens.mean(dim=1)  # [B, embed_dim]
-            spatial_features.append(feat)
+        # Stack into: [B, T, num_patches, embed_dim]
+        spatial_tokens_all = torch.stack(spatial_tokens_all, dim=1)
+        
+        # Store first timestep tokens for skip connection
+        skip_features = spatial_tokens_all[:, 0, :, :]  # [B, num_patches, embed_dim]
 
-        # Stack into temporal sequence: [B, T, embed_dim]
-        temporal_input = torch.stack(spatial_features, dim=1)
+        # 3. Reshape for per-patch temporal modeling
+        # [B, T, num_patches, embed_dim] -> [B, num_patches, T, embed_dim]
+        spatial_tokens_all = spatial_tokens_all.transpose(1, 2)
+        num_patches = spatial_tokens_all.shape[1]
+        
+        # Reshape to [B*num_patches, T, embed_dim] for temporal transformer
+        temporal_input = rearrange(spatial_tokens_all, 'b p t c -> (b p) t c')
 
-        # 3. Add wind context
+        # 4. Add wind context (broadcast to all patches)
         wind_feat = self.wind_embed(wind_inputs.transpose(1, 2))  # [B, T, embed_dim]
+        wind_feat = wind_feat.unsqueeze(1).expand(B, num_patches, T, -1)  # [B, num_patches, T, embed_dim]
+        wind_feat = rearrange(wind_feat, 'b p t c -> (b p) t c')
         temporal_input = temporal_input + wind_feat
 
-        # 4. Temporal transformer
-        temporal_output = self.temporal_transformer(temporal_input, valid_tokens)  # [B, T, embed_dim]
+        # 5. Temporal transformer - process each patch's temporal sequence
+        # Expand valid_tokens for all patches
+        if valid_tokens is not None:
+            valid_tokens_expanded = valid_tokens.unsqueeze(1).expand(B, num_patches, T)
+            valid_tokens_expanded = rearrange(valid_tokens_expanded, 'b p t -> (b p) t')
+        else:
+            valid_tokens_expanded = None
+            
+        temporal_output = self.temporal_transformer(temporal_input, valid_tokens_expanded)  # [B*num_patches, T, embed_dim]
 
-        # 5. Get last timestep features
-        # If valid_tokens provided, use the last valid token per sample
+        # 6. Get last timestep features per patch
         if valid_tokens is not None:
             # Get index of last valid token per sample
             last_valid_idx = valid_tokens.sum(dim=1).long() - 1  # [B]
             last_valid_idx = last_valid_idx.clamp(min=0, max=T-1)
-
+            
+            # Expand to all patches
+            last_valid_idx = last_valid_idx.unsqueeze(1).expand(B, num_patches)  # [B, num_patches]
+            last_valid_idx = rearrange(last_valid_idx, 'b p -> (b p)')
+            
             # Gather last valid features
-            batch_indices = torch.arange(B, device=temporal_output.device)
-            final_feat = temporal_output[batch_indices, last_valid_idx, :]  # [B, embed_dim]
+            batch_indices = torch.arange(B * num_patches, device=temporal_output.device)
+            final_feat = temporal_output[batch_indices, last_valid_idx, :]  # [B*num_patches, embed_dim]
         else:
-            final_feat = temporal_output[:, -1, :]  # [B, embed_dim]
+            final_feat = temporal_output[:, -1, :]  # [B*num_patches, embed_dim]
 
-        # 6. Decode to spatial prediction
-        # We need to broadcast the global feature back to patches
-        num_patches = self.spatial_encoder.num_patches
-        patch_features = final_feat.unsqueeze(1).expand(B, num_patches, -1)  # [B, num_patches, embed_dim]
+        # Reshape back to [B, num_patches, embed_dim]
+        patch_features = rearrange(final_feat, '(b p) c -> b p c', b=B, p=num_patches)
 
-        output = self.decoder(patch_features)  # [B, num_classes, H, W]
+        # 7. Decode to spatial prediction with skip connections
+        output = self.decoder(patch_features, skip_features)  # [B, num_classes, H, W]
 
         return output
 

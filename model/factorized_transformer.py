@@ -200,15 +200,15 @@ class SpatialDecoder(nn.Module):
         # Reshape patches to 2D grid
         H = W = self.num_patches_per_side
         features = rearrange(patch_features, 'b (h w) c -> b c h w', h=H, w=W)
-        
+
         # Upsample to full resolution
         output = self.decoder(features)  # [B, num_classes, ?, ?]
-        
+
         # Ensure output is exactly img_size x img_size using interpolation
         if output.shape[-2:] != (self.img_size, self.img_size):
-            output = F.interpolate(output, size=(self.img_size, self.img_size), 
+            output = F.interpolate(output, size=(self.img_size, self.img_size),
                                   mode='bilinear', align_corners=False)
-        
+
         return output
 
 
@@ -396,19 +396,19 @@ class FactorizedFireTransformer(pl.LightningModule):
         # --- DON'T crop target if it's already 400x400 ---
         # Only crop prediction to match target size
         target_fire = isochrone_mask[:, 1:2, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask
-        
+
         # Crop or interpolate pred to match target size
         if pred.shape[-2:] != target_fire.shape[-2:]:
             if pred.shape[-2] > target_fire.shape[-2]:
                 # Crop prediction
                 crop_h = (pred.shape[-2] - target_fire.shape[-2]) // 2
                 crop_w = (pred.shape[-1] - target_fire.shape[-1]) // 2
-                pred = pred[..., crop_h:-crop_h if crop_h > 0 else None, 
+                pred = pred[..., crop_h:-crop_h if crop_h > 0 else None,
                           crop_w:-crop_w if crop_w > 0 else None]
             else:
                 # Interpolate prediction up
                 pred = F.interpolate(pred, size=target_fire.shape[-2:], mode='bilinear', align_corners=False)
-        
+
         pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred
         loss = self.loss_fn(pred_fire, target_fire)
         self.log("train/loss", loss, on_step=True, on_epoch=False, prog_bar=True, logger=True)
@@ -444,17 +444,17 @@ class FactorizedFireTransformer(pl.LightningModule):
 
         # Extract target first
         target_fire = isochrone_mask[:, 1:2, :, :] if isochrone_mask.shape[1] == 2 else isochrone_mask
-        
+
         # Match prediction size to target
         if pred.shape[-2:] != target_fire.shape[-2:]:
             if pred.shape[-2] > target_fire.shape[-2]:
                 crop_h = (pred.shape[-2] - target_fire.shape[-2]) // 2
                 crop_w = (pred.shape[-1] - target_fire.shape[-1]) // 2
-                pred = pred[..., crop_h:-crop_h if crop_h > 0 else None, 
+                pred = pred[..., crop_h:-crop_h if crop_h > 0 else None,
                           crop_w:-crop_w if crop_w > 0 else None]
             else:
                 pred = F.interpolate(pred, size=target_fire.shape[-2:], mode='bilinear', align_corners=False)
-        
+
         pred_fire = pred[:, 1:2, :, :] if pred.shape[1] == 2 else pred
 
         loss = self.loss_fn(pred_fire, target_fire)
@@ -503,7 +503,7 @@ class FactorizedFireTransformer(pl.LightningModule):
             )
             optim_dict['lr_scheduler'] = {
                 'scheduler': scheduler_obj,
-                'monitor': self.hparams.lr_scheduler.get('monitor', 'val_loss'),
+                'monitor': self.hparams.lr_scheduler.get('monitor', 'val/loss'),
                 'frequency': self.hparams.lr_scheduler.get('frequency', 1)
             }
 

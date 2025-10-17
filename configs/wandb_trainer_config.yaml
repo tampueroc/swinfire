@@ -25,25 +25,25 @@ logger:
 callbacks:
   early_stopper:
     enabled: true
-    monitor: val_loss
+    monitor: val/loss
     patience: 10
     mode: min
     min_delta: 0.001
-  
+
   image_logger:
     enabled: false  # Disable if using wandb_explainability
-  
+
   logging_callback:
     enabled: true
-  
+
   final_metrics_callback:
     enabled: true
     on_training_data: false
     on_validation_data: true
-  
+
   learning_rate_monitor:
     enabled: true
-  
+
   # W&B Explainability Callback (NEW!)
   wandb_explainability:
     enabled: false  # DISABLED - enable after training for analysis

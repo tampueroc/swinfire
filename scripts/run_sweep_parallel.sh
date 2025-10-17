@@ -9,17 +9,17 @@ fi
 
 SWEEP_ID=$1
 
-# Activate environment
-source .venv/bin/activate
+# Create logs directory if not exists
+mkdir -p logs
 
 # Run agent on GPU 0 in background
 echo "Starting agent on GPU 0..."
-CUDA_VISIBLE_DEVICES=0 wandb agent $SWEEP_ID > logs/sweep_gpu0.log 2>&1 &
+CUDA_VISIBLE_DEVICES=0 uv run wandb agent $SWEEP_ID > logs/sweep_gpu0.log 2>&1 &
 GPU0_PID=$!
 
 # Run agent on GPU 1 in background  
 echo "Starting agent on GPU 1..."
-CUDA_VISIBLE_DEVICES=1 wandb agent $SWEEP_ID > logs/sweep_gpu1.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 uv run wandb agent $SWEEP_ID > logs/sweep_gpu1.log 2>&1 &
 GPU1_PID=$!
 
 echo "Agents running:"

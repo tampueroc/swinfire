@@ -23,11 +23,72 @@ def load_yaml_config(path):
         return yaml.safe_load(f)
 
 
+def apply_cli_overrides(config, overrides):
+    """
+    Apply CLI overrides to nested config dict.
+    
+    Args:
+        config: Config dict to modify
+        overrides: List of "key=value" or "nested.key=value" strings
+    
+    Example:
+        overrides = ["embed_dim=512", "loss_fn_settings.weight=0.3"]
+        apply_cli_overrides(model_cfg, overrides)
+    """
+    for override in overrides:
+        if '=' not in override:
+            print(f"Warning: Ignoring invalid override format: {override}")
+            continue
+        
+        key_path, value_str = override.split('=', 1)
+        
+        # Parse value (try int, float, bool, then string)
+        try:
+            if value_str.lower() == 'true':
+                value = True
+            elif value_str.lower() == 'false':
+                value = False
+            elif '.' in value_str:
+                value = float(value_str)
+            else:
+                value = int(value_str)
+        except ValueError:
+            value = value_str
+        
+        # Handle nested keys (e.g., "loss_fn_settings.weight")
+        keys = key_path.split('.')
+        target = config
+        for key in keys[:-1]:
+            if key not in target:
+                target[key] = {}
+            target = target[key]
+        
+        target[keys[-1]] = value
+        print(f"  Override: {key_path} = {value}")
+
+
 def main(args):
     global_cfg = load_yaml_config(args.global_config)
     model_cfg = load_yaml_config(args.model_config)
     trainer_cfg = load_yaml_config(args.trainer_config)
     data_cfg = load_yaml_config(args.data_config)
+    
+    # Apply CLI overrides (if provided)
+    if args.override:
+        print("=" * 60)
+        print("CLI overrides detected:")
+        print("=" * 60)
+        # Apply to model, trainer, and data configs
+        for override in args.override:
+            key = override.split('=')[0].split('.')[0]
+            # Route override to appropriate config
+            if key in trainer_cfg or key == 'fast_dev_run' or key == 'max_epochs':
+                apply_cli_overrides(trainer_cfg, [override])
+            elif key in data_cfg or key == 'batch_size':
+                apply_cli_overrides(data_cfg, [override])
+            else:
+                apply_cli_overrides(model_cfg, [override])
+        print("=" * 60 + "\n")
     
     # Override config with WandB sweep parameters (if running in sweep)
     if wandb.run is not None and hasattr(wandb.config, 'keys'):
@@ -227,12 +288,31 @@ if __name__ == "__main__":
     if 'WANDB_SWEEP_ID' in os.environ:
         wandb.init()
     
-    parser = argparse.ArgumentParser(description="Train FactorizedFireTransformer model")
+    parser = argparse.ArgumentParser(
+        description="Train FactorizedFireTransformer model",
+        epilog="""
+Examples:
+  # Basic training
+  python scripts/train_factorized_model.py
+  
+  # Override single parameter
+  python scripts/train_factorized_model.py --override embed_dim=512
+  
+  # Override multiple parameters
+  python scripts/train_factorized_model.py --override embed_dim=512 dropout=0.2
+  
+  # Override nested parameters
+  python scripts/train_factorized_model.py --override loss_fn_settings.weight=0.3
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--global_config", default="configs/global_config.yaml", help="Path to global config.")
     parser.add_argument("--trainer_config", default="configs/trainer_config.yaml", help="Path to trainer config.")
     parser.add_argument("--data_config", default="configs/data_config.yaml", help="Path to data config.")
     parser.add_argument("--model_config", default="configs/factorized_model_config.yaml", 
                         help="Path to model config (default: factorized_model_config.yaml)")
+    parser.add_argument("--override", nargs='+', metavar="KEY=VALUE",
+                        help="Override config parameters (e.g., --override embed_dim=512 loss_fn_settings.weight=0.3)")
     
     # Parse only known args to ignore WandB sweep parameters passed as CLI
     args, unknown = parser.parse_known_args()

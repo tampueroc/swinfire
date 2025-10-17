@@ -1,5 +1,13 @@
 # WandB Sweep Configuration - Optimize for 85% Precision
 program: scripts/train_factorized_model.py
+command:
+  - ${env}
+  - python
+  - ${program}
+  - "--global_config=configs/global_config.yaml"
+  - "--trainer_config=configs/wandb_trainer_config.yaml"
+  - "--data_config=configs/data_config.yaml"
+  - "--model_config=configs/factorized_model_config.yaml"
 method: bayes  # Bayesian optimization (smarter than grid/random)
 metric:
   name: val_precision

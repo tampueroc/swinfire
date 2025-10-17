@@ -5,6 +5,7 @@ from lightning.pytorch.profilers import AdvancedProfiler
 from pytorch_lightning.callbacks import LearningRateMonitor
 import sys
 import os
+import wandb
 
 # Add repository root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -27,6 +28,26 @@ def main(args):
     model_cfg = load_yaml_config(args.model_config)
     trainer_cfg = load_yaml_config(args.trainer_config)
     data_cfg = load_yaml_config(args.data_config)
+    
+    # Override config with WandB sweep parameters (if running in sweep)
+    if wandb.run is not None and hasattr(wandb.config, 'keys'):
+        print("=" * 60)
+        print("WandB Sweep detected - overriding config parameters:")
+        print("=" * 60)
+        for key in wandb.config.keys():
+            if '.' in key:
+                # Handle nested keys like 'loss_fn_settings.weight'
+                parts = key.split('.')
+                if parts[0] in model_cfg:
+                    if isinstance(model_cfg[parts[0]], dict):
+                        model_cfg[parts[0]][parts[1]] = wandb.config[key]
+                        print(f"  {key} = {wandb.config[key]}")
+            else:
+                # Handle top-level keys
+                if key in model_cfg:
+                    model_cfg[key] = wandb.config[key]
+                    print(f"  {key} = {wandb.config[key]}")
+        print("=" * 60 + "\n")
 
     # Logger - Use W&B instead of TensorBoard
     logger_cfg = trainer_cfg['logger']

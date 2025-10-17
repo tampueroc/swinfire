@@ -15,7 +15,8 @@ def get_wandb_logger(
     entity: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
     save_dir: str = "./wandb",
-    log_model: bool = True,
+    log_model: Any = "all",  # Can be 'all', 'best', True, or False
+    tags: Optional[list] = None,
     **kwargs
 ) -> WandbLogger:
     """
@@ -48,8 +49,9 @@ def get_wandb_logger(
         name=name,
         entity=entity,
         save_dir=save_dir,
-        log_model=log_model if log_model else False,
+        log_model=log_model,  # 'all' uploads all checkpoints as artifacts
         config=config,
+        tags=tags if tags else None,
         **kwargs
     )
     

@@ -13,25 +13,35 @@ profiler: simple  # simple, advanced
 logger:
   enabled: true
   type: wandb  # 'wandb' or 'tensorboard'
-  project: fire-prediction  # Your W&B project name
-  name: factorized-transformer-v1  # Run name
+  project: swinfire-scripts  # Your W&B project name
+  name: precision-optimization  # Run name (will be overridden by sweep)
   entity: null  # Your W&B team/username (null = personal account)
   dir: ./wandb  # Local directory for wandb logs
-  log_model: true  # Log model checkpoints to W&B
+  log_model: all  # 'all' uploads all checkpoints as artifacts, 'best' only best, true = last only
   # Optional: add tags
-  # tags: ["transformer", "explainability", "thesis"]
+  tags: ["precision-target-85", "sweep", "decoder-enhanced"]
 
 # Callbacks
 callbacks:
+  model_checkpoint:
+    enabled: true
+    monitor: val_precision  # Save best model by precision (target: 85%)
+    mode: max  # Higher is better for precision
+    save_top_k: 3  # Keep top 3 checkpoints
+    save_last: true  # Also save last checkpoint
+    dirpath: ./checkpoints  # Save directory
+    filename: factorized-{epoch:02d}-{val_precision:.3f}  # Filename pattern
+    verbose: true
+
   early_stopper:
     enabled: true
-    monitor: val_loss
-    patience: 10
-    mode: min
-    min_delta: 0.001
+    monitor: val_precision  # Stop if precision plateaus
+    patience: 15  # Increased patience for sweep
+    mode: max  # Higher is better
+    min_delta: 0.01  # Stop if no 1% improvement
 
   image_logger:
-    enabled: false  # Disable if using wandb_explainability
+    enabled: true  # Enable for visual validation
 
   logging_callback:
     enabled: true

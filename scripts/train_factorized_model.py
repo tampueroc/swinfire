@@ -68,7 +68,8 @@ def main(args):
                 entity=logger_cfg.get('entity', None),
                 config=wandb_config,
                 save_dir=logger_cfg.get('dir', './wandb'),
-                log_model=logger_cfg.get('log_model', True)
+                log_model=logger_cfg.get('log_model', 'all'),  # 'all', 'best', or True
+                tags=logger_cfg.get('tags', [])
             )
         else:
             # Fallback to TensorBoard
@@ -83,6 +84,22 @@ def main(args):
     # Callbacks
     callbacks_cfg = trainer_cfg['callbacks']
     callbacks = []
+
+    # Model Checkpoint
+    checkpoint_cfg = callbacks_cfg.get('model_checkpoint', {})
+    if checkpoint_cfg.get('enabled', False) is True:
+        from pytorch_lightning.callbacks import ModelCheckpoint
+        checkpoint_callback = ModelCheckpoint(
+            monitor=checkpoint_cfg.get('monitor', 'val_loss'),
+            mode=checkpoint_cfg.get('mode', 'min'),
+            save_top_k=checkpoint_cfg.get('save_top_k', 3),
+            save_last=checkpoint_cfg.get('save_last', True),
+            dirpath=checkpoint_cfg.get('dirpath', './checkpoints'),
+            filename=checkpoint_cfg.get('filename', 'model-{epoch:02d}-{val_loss:.2f}'),
+            verbose=checkpoint_cfg.get('verbose', True)
+        )
+        callbacks.append(checkpoint_callback)
+        print(f"✓ ModelCheckpoint enabled: monitoring {checkpoint_cfg.get('monitor', 'val_loss')}")
 
     early_stopper_cfg = callbacks_cfg['early_stopper']
     if early_stopper_cfg.get('enabled', False) is True:

@@ -637,7 +637,7 @@ class FactorizedFireTransformer(pl.LightningModule):
         self.log("val_f1", self.val_f1, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_iou", self.val_jaccard_index, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
-        return {"loss": loss}
+        return {"loss": loss, "predictions": pred, "targets": isochrone_mask}
 
 
     def configure_optimizers(self):
